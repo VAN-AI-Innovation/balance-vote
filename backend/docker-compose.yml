@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres
+    container_name: balance-vote-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: balance_vote
+    ports:
+      - "5432:5432"
+    volumes:
+      - balance-vote-db-data:/var/lib/postgresql/data
+
+volumes:
+  balance-vote-db-data:
