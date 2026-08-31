@@ -2,6 +2,7 @@ package com.vote.balance.balancevote.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +36,20 @@ public class VoteSession {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        if (this.status == null) this.status = VoteStatus.WAITING;
+        if (this.status == null) {
+            this.status = VoteStatus.WAITING;
+        }
+    }
+
+    public void open() {
+        this.status = VoteStatus.OPEN;
+    }
+
+    public void close() {
+        this.status = VoteStatus.CLOSED;
+    }
+
+    public void reset() {
+        this.status = VoteStatus.WAITING;
     }
 }
