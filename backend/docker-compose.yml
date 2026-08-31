@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres
+    image: postgres:17
     container_name: balance-vote-db
     environment:
       POSTGRES_PASSWORD: postgres
