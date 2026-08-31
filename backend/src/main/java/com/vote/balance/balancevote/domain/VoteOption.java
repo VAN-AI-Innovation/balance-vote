@@ -22,5 +22,7 @@ public class VoteOption {
     @Column(nullable = false)
     private String label;
 
-    private String colorTag;
+    public void update(String label) {
+        this.label = label;
+    }
 }
