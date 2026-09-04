@@ -1,5 +1,6 @@
 package com.vote.balance.balancevote.controller;
 
+import com.vote.balance.balancevote.dto.VoteSessionResponse;
 import com.vote.balance.balancevote.service.VoteSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,11 @@ import org.springframework.web.bind.annotation.*;
 public class VoteSessionAdminController {
 
     private final VoteSessionService voteSessionService;
+
+    @GetMapping("/{year}")
+    public ResponseEntity<VoteSessionResponse> get(@PathVariable Integer year) {
+        return ResponseEntity.ok(voteSessionService.get(year));
+    }
 
     @PostMapping("/{year}/open")
     public ResponseEntity<Void> open(@PathVariable Integer year) {

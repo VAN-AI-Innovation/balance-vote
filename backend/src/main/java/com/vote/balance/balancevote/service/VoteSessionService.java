@@ -1,6 +1,7 @@
 package com.vote.balance.balancevote.service;
 
 import com.vote.balance.balancevote.domain.VoteSession;
+import com.vote.balance.balancevote.dto.VoteSessionResponse;
 import com.vote.balance.balancevote.domain.VoteStatus;
 import com.vote.balance.balancevote.repository.VoteRecordRepository;
 import com.vote.balance.balancevote.repository.VoteSessionRepository;
@@ -17,6 +18,10 @@ public class VoteSessionService {
 
     private final VoteSessionRepository voteSessionRepository;
     private final VoteRecordRepository voteRecordRepository;
+
+    public VoteSessionResponse get(Integer year) {
+        return VoteSessionResponse.from(findSession(year));
+    }
 
     @Transactional
     public void open(Integer year) {
