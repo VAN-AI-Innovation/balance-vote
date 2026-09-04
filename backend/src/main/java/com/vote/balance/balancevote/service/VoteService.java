@@ -13,12 +13,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
+
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -71,7 +74,16 @@ public class VoteService {
                 .voterToken(request.voterToken())
                 .build();
 
-        voteRecordRepository.save(voteRecord);
+        try {
+            voteRecordRepository.saveAndFlush(voteRecord);
+        } catch (DataIntegrityViolationException e) {
+            // 동시 요청으로 중복 투표 검증을 동시에 통과한 경우에도
+            // DB의 (session_id, voter_token) UNIQUE 제약으로 중복 투표를 차단한다.
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 투표한 사용자입니다."
+            );
+        }
 
         VoteResultResponse result = getResult(session);
 
@@ -81,6 +93,19 @@ public class VoteService {
         );
 
         return result;
+    }
+
+    public String issueVoterToken(Integer year) {
+        VoteSession session = findSession(year);
+
+        if (session.getStatus() != VoteStatus.OPEN) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "OPEN 상태의 세션에서만 투표자 토큰을 발급할 수 있습니다."
+            );
+        }
+
+        return UUID.randomUUID().toString();
     }
 
     public VoteResultResponse getResult(Integer year) {
