@@ -159,6 +159,9 @@ function ParticipantPage() {
     return (
       <main className="participant-page">
         <section className="participant-card">
+          <a className="back-button" href="/" aria-label="메인 페이지로 돌아가기">
+            ← 메인으로
+          </a>
           <p className="participant-loading">투표를 준비하고 있습니다.</p>
         </section>
       </main>
