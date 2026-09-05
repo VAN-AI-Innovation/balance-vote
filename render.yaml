@@ -1,0 +1,40 @@
+# Render Blueprint — https://render.com/deploy 로 이 레포를 연결하면 자동 인식된다.
+#
+# 무료 플랜 제약:
+# - 웹 서비스: 15분간 요청이 없으면 슬립, 다음 요청 시 30~60초 정도 깨어나는 시간이 걸린다.
+#   행사 시작 10~15분 전에 관리자 페이지를 한 번 열어 미리 깨워둘 것.
+# - PostgreSQL: 생성 후 일정 기간(플랜 정책에 따라 30~90일) 뒤 만료된다.
+#   행사(9/12) 용도로는 문제없지만, 끝나면 관리자 화면에서 CSV로 결과를 미리 내려받아 둘 것.
+services:
+  - type: web
+    name: balance-vote-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: balance-vote-db
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: balance-vote-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: balance-vote-db
+          property: password
+      # 관리자 API 보호용 키. Render 대시보드에서 직접 값을 입력한다(sync: false).
+      - key: ADMIN_TOKEN
+        sync: false
+      # 프론트가 올라갈 도메인. van.io.kr(커스텀 도메인)과 Vercel 미리보기 배포를 모두 허용한다.
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://van.io.kr,https://*.vercel.app
+      # 세션1에서 진행할 연도. 필요하면 대시보드에서 값만 바꾸면 된다.
+      - key: VOTE_SESSION_YEARS
+        value: 2030,2035,2040,2045,2050
+
+databases:
+  - name: balance-vote-db
+    plan: free
