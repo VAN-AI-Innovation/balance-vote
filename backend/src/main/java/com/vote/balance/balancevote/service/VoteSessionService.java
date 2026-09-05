@@ -33,28 +33,53 @@ public class VoteSessionService {
     }
 
     public VoteSessionResponse getCurrent() {
-        VoteSession currentSession = voteSessionRepository.findByCurrentTrue()
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "현재 선택된 투표 세션이 없습니다."
-                ));
+        VoteSession currentSession =
+                voteSessionRepository.findByCurrentTrue()
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "현재 선택된 투표 세션이 없습니다."
+                        ));
 
         return VoteSessionResponse.from(currentSession);
     }
 
+    /**
+     * 현재 세션 변경
+     * 1. DB에서 현재 세션을 먼저 모두 false로 변경
+     * 2. persistence context를 자동 clear
+     * 3. 대상 세션을 다시 조회
+     * 4. 대상 세션을 true로 변경
+     *
+     * 순서로 처리한다.
+     */
     @Transactional
     public VoteSessionResponse selectCurrent(Integer year) {
-        VoteSession target = findSession(year);
 
-        voteSessionRepository.findByCurrentTrue()
-                .ifPresent(session -> {
-                    if (!session.getId().equals(target.getId())) {
-                        session.clearCurrent();
-                    }
-                });
+        /*
+         * 대상 세션이 실제로 존재하는지 먼저 확인한다.
+         */
+        findSession(year);
+
+        /*
+         * 기존 current=true 세션을 DB에서 먼저 해제한다.
+         *
+         * clearAutomatically = true이므로
+         * bulk update 이후 영속성 컨텍스트도 초기화된다.
+         */
+        voteSessionRepository.clearCurrentSessions();
+
+        /*
+         * 영속성 컨텍스트가 초기화되었으므로
+         * 대상 세션을 다시 조회한다.
+         */
+        VoteSession target = findSession(year);
 
         target.selectAsCurrent();
 
+        /*
+         * target은 현재 트랜잭션에서 관리되는 엔티티이므로
+         * 트랜잭션 종료 시 current=true가 DB에 반영된다.
+         */
         return VoteSessionResponse.from(target);
     }
 
