@@ -172,6 +172,9 @@ function ParticipantPage() {
     return (
       <main className="participant-page">
         <section className="participant-card">
+          <a className="back-button" href="/" aria-label="메인 페이지로 돌아가기">
+            ← 메인으로
+          </a>
           <div className="participant-state">
             <div className="state-icon">⏳</div>
             <h1>현재 진행 중인 투표가 없습니다</h1>
