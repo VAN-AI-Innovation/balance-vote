@@ -27,25 +27,8 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
-  const navigate = (nextRoute: Route) => {
-    window.history.pushState({}, '', nextRoute)
-    setRoute(nextRoute)
-  }
-
   return (
     <>
-      <nav>
-        <button type="button" onClick={() => navigate('/participant')}>
-          참가자
-        </button>
-        <button type="button" onClick={() => navigate('/admin')}>
-          관리자
-        </button>
-        <button type="button" onClick={() => navigate('/result')}>
-          결과
-        </button>
-      </nav>
-
       {route === '/participant' && <ParticipantPage />}
       {route === '/admin' && <AdminPage />}
       {route === '/result' && <ResultPage />}
