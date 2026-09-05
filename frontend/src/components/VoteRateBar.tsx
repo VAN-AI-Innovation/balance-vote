@@ -39,8 +39,8 @@ function VoteRateBar({
 }: VoteRateBarProps) {
   const targetRate = Math.min(100, Math.max(0, voteRate))
 
-  const [animatedRate, setAnimatedRate] = useState(targetRate)
-  const [animatedCount, setAnimatedCount] = useState(voteCount)
+  const [animatedRate, setAnimatedRate] = useState(0)
+  const [animatedCount, setAnimatedCount] = useState(0)
 
   /*
    * 현재 화면에 그려진 값.
@@ -51,12 +51,12 @@ function VoteRateBar({
    * 튀었다가 다시 늘어나는 현상이 있었다.
    * 매 프레임 실제 표시값을 기록해 항상 현재 위치에서 이어지게 한다.
    */
-  const displayedRateRef = useRef(targetRate)
-  const displayedCountRef = useRef(voteCount)
+  const displayedRateRef = useRef(0)
+  const displayedCountRef = useRef(0)
 
   useEffect(() => {
-    const startRate = displayedRateRef.current
-    const startCount = displayedCountRef.current
+    const startRate = 0
+    const startCount = 0
     const startTime = performance.now()
 
     let animationFrame = 0
