@@ -271,6 +271,16 @@
   font-weight: 750;
 }
 
+.secondary-button.danger-button {
+  border-color: #f0c7c7;
+  color: #b42318;
+}
+
+.secondary-button.danger-button:hover:not(:disabled) {
+  border-color: #e5a8a8;
+  background: #fff5f4;
+}
+
 .option-section {
   margin-top: 44px;
 }
