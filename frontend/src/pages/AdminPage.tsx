@@ -244,21 +244,15 @@ function AdminPage() {
 
     const { year, status } = selectedSession
 
-    /*
-     * 이미 마감된 세션은 다시 오픈하지 않습니다.
-     */
-    if (status === 'CLOSED') {
-      setError(
-        '마감된 세션은 다시 오픈할 수 없습니다. 필요하면 초기화 후 오픈해 주세요.',
-      )
-      return
-    }
-
     const nextStatus: SessionStatus =
       status === 'OPEN' ? 'CLOSED' : 'OPEN'
 
     const action =
-      nextStatus === 'OPEN' ? 'open' : 'close'
+      status === 'WAITING'
+        ? 'open'
+        : status === 'OPEN'
+          ? 'close'
+          : 'reopen'
 
     setActionLoading(true)
     setError('')
@@ -301,6 +295,70 @@ function AdminPage() {
               ? {
                   ...session,
                   status: nextStatus,
+                }
+              : session,
+          ),
+        )
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  /*
+   * 현재 세션을 초기화합니다.
+   *
+   * Reset은 CLOSED 상태에서만 가능하며,
+   * 기존 투표 기록을 삭제하고 WAITING 상태로 되돌립니다.
+   */
+  async function handleReset() {
+    if (
+      !selectedSession ||
+      selectedSession.status !== 'CLOSED' ||
+      actionLoading
+    ) {
+      return
+    }
+
+    if (
+      !window.confirm(
+        `${selectedSession.year}년 세션을 초기화하시겠습니까?\n\n기존 투표 기록이 모두 삭제되고 대기 상태로 돌아갑니다.`,
+      )
+    ) {
+      return
+    }
+
+    setActionLoading(true)
+    setError('')
+
+    try {
+      const updated = await request<VoteSession>(
+        `/sessions/${selectedSession.year}/reset`,
+        {
+          method: 'POST',
+        },
+      )
+
+      if (updated) {
+        setSessions((current) =>
+          current.map((session) =>
+            session.year === selectedSession.year
+              ? {
+                  ...session,
+                  ...updated,
+                }
+              : session,
+          ),
+        )
+      } else {
+        setSessions((current) =>
+          current.map((session) =>
+            session.year === selectedSession.year
+              ? {
+                  ...session,
+                  status: 'WAITING',
                 }
               : session,
           ),
@@ -701,10 +759,7 @@ function AdminPage() {
                 onClick={() =>
                   void handleStatusToggle()
                 }
-                disabled={
-                  actionLoading ||
-                  selectedSession.status === 'CLOSED'
-                }
+                disabled={actionLoading}
                 aria-pressed={
                   selectedSession.status === 'OPEN'
                 }
@@ -713,10 +768,23 @@ function AdminPage() {
                   <span className="toggle-thumb" />
                 </span>
 
-                {selectedSession.status === 'OPEN'
+                {selectedSession.status === 'WAITING'
                   ? 'Open'
-                  : 'Close'}
+                  : selectedSession.status === 'OPEN'
+                    ? 'Close'
+                    : 'Reopen'}
               </button>
+
+              {selectedSession.status === 'CLOSED' && (
+                <button
+                  className="secondary-button danger-button"
+                  type="button"
+                  onClick={() => void handleReset()}
+                  disabled={actionLoading}
+                >
+                  초기화
+                </button>
+              )}
 
               {!selectedSession.current && (
                 <button

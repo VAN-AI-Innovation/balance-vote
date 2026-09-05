@@ -53,6 +53,10 @@ public class VoteSession {
         this.status = VoteStatus.CLOSED;
     }
 
+    public void reopen() {
+        this.status = VoteStatus.OPEN;
+    }
+
     public void reset() {
         this.status = VoteStatus.WAITING;
     }
