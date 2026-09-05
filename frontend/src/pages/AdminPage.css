@@ -1,88 +1,185 @@
 .admin-page {
-  width: min(1080px, calc(100% - 40px));
+  width: min(1080px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 56px 0 80px;
+  padding: 40px 0 80px;
   text-align: left;
 }
 
+.admin-page-centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 0;
+}
+
+.admin-loading {
+  padding: 80px 0;
+  color: #6f7b8f;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ---------------- 로그인 ---------------- */
+
+.admin-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 32px;
+  border: 1px solid #e3e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 30px rgba(23, 35, 60, 0.07);
+}
+
+.admin-login h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.admin-login-description {
+  margin: 0 0 4px;
+  color: #6f7b8f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.admin-login input {
+  padding: 12px 14px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.admin-login input:focus {
+  border-color: #29436f;
+  outline: none;
+}
+
+/* ---------------- 헤더 ---------------- */
+
 .admin-header {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e3e8f0;
 }
 
 .admin-eyebrow,
 .section-kicker {
   margin: 0 0 8px;
-  color: #5b6f91;
+  color: #29436f;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.admin-header h1,
-.admin-section h2,
-.control-card h2 {
-  margin: 0;
-  color: #14213d;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .admin-header h1 {
-  font-size: clamp(30px, 5vw, 44px);
-  letter-spacing: -0.04em;
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 .admin-description {
-  max-width: 650px;
-  margin-top: 12px;
-  color: #68758a;
-  font-size: 15px;
-  line-height: 1.7;
+  margin: 10px 0 0;
+  color: #6f7b8f;
+  font-size: 14px;
+  line-height: 1.65;
 }
 
-.session-status-badge,
-.session-status {
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.link-button {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  width: fit-content;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.session-status-badge {
-  padding: 9px 13px;
-  border: 1px solid #dbe2ec;
+  padding: 8px 12px;
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
   background: #fff;
-  white-space: nowrap;
+  color: #29436f;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.status-dot {
+.link-button:hover:not(:disabled) {
+  background: #f6f8fb;
+}
+
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.connection-badge.connected {
+  background: #e7f7ed;
+  color: #14713c;
+}
+
+.connection-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: currentColor;
 }
 
-.session-status-badge.open,
-.session-status.open {
-  color: #177245;
+/* ---------------- 알림 ---------------- */
+
+.admin-error,
+.admin-notice,
+.info-panel {
+  margin-top: 16px;
+  padding: 13px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-.session-status-badge.waiting,
-.session-status.waiting {
-  color: #667085;
+.admin-error {
+  background: #fff4f4;
+  color: #b33a3a;
 }
 
-.session-status-badge.closed,
-.session-status.closed {
-  color: #b54747;
+.admin-notice {
+  background: #eef8f1;
+  color: #16713d;
 }
+
+.info-panel {
+  background: #f6f8fb;
+  color: #4e5b70;
+}
+
+/* ---------------- 섹션 ---------------- */
 
 .admin-section {
-  margin-top: 42px;
+  margin-top: 36px;
 }
 
 .section-heading {
@@ -94,385 +191,395 @@
 }
 
 .section-heading h2 {
-  font-size: 21px;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .section-count {
-  color: #7a8799;
+  color: #6f7b8f;
   font-size: 13px;
   font-weight: 700;
 }
 
+.empty-panel {
+  padding: 28px;
+  border: 1px dashed #d7dee8;
+  border-radius: 12px;
+  color: #6f7b8f;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---------------- 세션 목록 ---------------- */
+
 .session-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 12px;
 }
 
 .session-card {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
-  min-height: 108px;
-  padding: 18px;
-  border: 1px solid #dfe5ee;
-  border-radius: 14px;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid #e3e8f0;
+  border-radius: 12px;
   background: #fff;
-  color: #14213d;
-  text-align: left;
   cursor: pointer;
-  box-shadow: 0 5px 20px rgba(20, 33, 61, 0.04);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .session-card:hover {
-  transform: translateY(-1px);
-  border-color: #aebbd0;
+  border-color: #b9c6da;
 }
 
 .session-card.selected {
-  border: 2px solid #14213d;
-  padding: 17px;
-  box-shadow: 0 8px 24px rgba(20, 33, 61, 0.09);
+  border-color: #17233c;
+  box-shadow: 0 0 0 2px rgba(23, 35, 60, 0.12);
 }
 
 .session-year {
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .session-status {
-  padding: 5px 8px;
-  background: #f4f6f9;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.session-status.waiting {
+  background: #eef1f5;
+  color: #566172;
 }
 
 .session-status.open {
-  background: #edf8f2;
+  background: #e7f7ed;
+  color: #14713c;
 }
 
 .session-status.closed {
-  background: #fff1f1;
+  background: #fdecec;
+  color: #a92f2f;
+}
+
+.session-meta {
+  color: #6f7b8f;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .current-label {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  color: #5b6f91;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #17233c;
+  color: #fff;
   font-size: 11px;
   font-weight: 800;
 }
 
+/* ---------------- 세션 제어 ---------------- */
+
 .control-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 28px;
-  margin-top: 20px;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 36px;
   padding: 24px;
-  border: 1px solid #dfe5ee;
-  border-radius: 16px;
-  background: #f8fafc;
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  background: #f6f8fb;
 }
 
-.control-card h2 {
+.control-info h2 {
+  margin: 0;
   font-size: 20px;
+  font-weight: 800;
 }
 
 .control-description {
-  margin-top: 8px;
-  color: #68758a;
+  margin: 10px 0 0;
+  color: #4e5b70;
   font-size: 14px;
-}
-
-.control-description strong {
-  color: #14213d;
+  line-height: 1.6;
 }
 
 .control-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.toggle-button,
-.secondary-button,
 .primary-button,
-.text-button {
-  border: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.toggle-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 13px;
-  border-radius: 9px;
-  background: #e8edf4;
-  color: #475467;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.toggle-button.is-open {
-  background: #14213d;
-  color: #fff;
-}
-
-.toggle-button:disabled,
-.secondary-button:disabled,
-.primary-button:disabled,
-.text-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.toggle-track {
-  position: relative;
-  width: 30px;
-  height: 18px;
-  border-radius: 999px;
-  background: #fff;
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #98a2b3;
-  transition: transform 0.15s ease;
-}
-
-.toggle-button.is-open .toggle-thumb {
-  transform: translateX(12px);
-  background: #14213d;
-}
-
 .secondary-button {
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid #d5dce7;
+  padding: 11px 17px;
+  border: 1px solid transparent;
   border-radius: 9px;
-  background: #fff;
-  color: #344054;
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.secondary-button.danger-button {
-  border-color: #f0c7c7;
-  color: #b42318;
-}
-
-.secondary-button.danger-button:hover:not(:disabled) {
-  border-color: #e5a8a8;
-  background: #fff5f4;
-}
-
-.option-section {
-  margin-top: 44px;
-}
-
-.option-form {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.option-form input,
-.option-edit-input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #d5dce7;
-  border-radius: 9px;
-  background: #fff;
-  color: #14213d;
-  outline: none;
-  font: inherit;
-}
-
-.option-form input {
-  height: 44px;
-  padding: 0 13px;
-  box-sizing: border-box;
-}
-
-.option-form input:focus,
-.option-edit-input:focus {
-  border-color: #64748b;
-  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .primary-button {
-  min-width: 72px;
-  padding: 0 16px;
-  border-radius: 9px;
-  background: #14213d;
+  background: #17233c;
   color: #fff;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #1d2f52;
+}
+
+.primary-button.danger-button {
+  background: #b33a3a;
+}
+
+.primary-button.danger-button:hover:not(:disabled) {
+  background: #9c3030;
+}
+
+.secondary-button {
+  border-color: #d7dee8;
+  background: #fff;
+  color: #29436f;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #eef2f8;
+}
+
+.secondary-button.danger-button {
+  border-color: #f0cccc;
+  color: #b33a3a;
+}
+
+.secondary-button.danger-button:hover:not(:disabled) {
+  background: #fff4f4;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------------- 문제 문구 ---------------- */
+
+.question-form {
+  padding: 18px;
+  border: 1px solid #e3e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.question-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.question-form textarea:focus {
+  border-color: #29436f;
+  outline: none;
+}
+
+.question-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.question-counter {
+  color: #8a94a6;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 실시간 집계 ---------------- */
+
+.tally-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #e3e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tally-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.3fr) 3fr auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.tally-label {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tally-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef1f5;
+}
+
+.tally-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #29436f;
+  transition: width 0.4s ease;
+}
+
+.tally-value {
+  color: #4e5b70;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------- 선택지 ---------------- */
+
+.option-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.option-form input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid #d7dee8;
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+.option-form input:focus {
+  border-color: #29436f;
+  outline: none;
+}
+
+.option-form input:disabled {
+  background: #f6f8fb;
 }
 
 .option-list {
-  overflow: hidden;
-  border: 1px solid #dfe5ee;
-  border-radius: 14px;
-  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .option-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 64px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #edf0f4;
-}
-
-.option-row:last-child {
-  border-bottom: 0;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  background: #fff;
 }
 
 .option-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
-  flex: 0 0 28px;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #f1f4f8;
-  color: #5f6b7a;
+  border-radius: 50%;
+  background: #eef2f8;
+  color: #29436f;
   font-size: 12px;
   font-weight: 800;
 }
 
 .option-label {
-  min-width: 0;
   flex: 1;
-  color: #344054;
   font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+  font-weight: 600;
 }
 
 .option-edit-input {
   flex: 1;
-  height: 40px;
-  padding: 0 11px;
-  box-sizing: border-box;
+  padding: 8px 11px;
+  border: 1px solid #29436f;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.option-edit-input:focus {
+  outline: none;
 }
 
 .option-actions {
   display: flex;
-  align-items: center;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
 .text-button {
-  padding: 7px 8px;
+  padding: 6px 10px;
+  border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #667085;
-  font-size: 12px;
-  font-weight: 750;
+  color: #6f7b8f;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .text-button:hover:not(:disabled) {
-  background: #f4f6f8;
-  color: #344054;
+  background: #f0f3f8;
+  color: #29436f;
 }
 
 .text-button.save {
-  color: #14213d;
+  color: #16713d;
 }
 
-.text-button.danger:hover:not(:disabled) {
-  color: #b42318;
-  background: #fff5f4;
+.text-button.danger {
+  color: #b33a3a;
 }
 
-.empty-panel,
-.admin-loading {
-  padding: 28px;
-  border: 1px dashed #d6dde7;
-  border-radius: 14px;
-  color: #7a8799;
-  background: #fbfcfd;
-  text-align: center;
-  font-size: 13px;
+.text-button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-.admin-error {
-  margin-top: 20px;
-  padding: 13px 16px;
-  border: 1px solid #f1d1d1;
-  border-radius: 10px;
-  background: #fff5f5;
-  color: #b42318;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-@media (max-width: 700px) {
-  .admin-page {
-    width: min(100% - 28px, 1080px);
-    padding-top: 40px;
-  }
-
-  .admin-header,
+@media (max-width: 720px) {
   .control-card {
-    align-items: flex-start;
     flex-direction: column;
   }
 
-  .admin-header {
-    gap: 16px;
-  }
-
-  .control-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .session-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .option-form {
-    flex-direction: column;
-  }
-
-  .primary-button {
-    height: 42px;
-  }
-
-  .option-row {
-    align-items: flex-start;
-    flex-wrap: wrap;
-    padding: 13px;
-  }
-
-  .option-label,
-  .option-edit-input {
-    width: calc(100% - 42px);
-    flex-basis: calc(100% - 42px);
-  }
-
-  .option-actions {
-    margin-left: 42px;
+  .tally-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 }

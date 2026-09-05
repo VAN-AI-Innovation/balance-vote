@@ -1,212 +1,245 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { API_BASE_URL } from '../config'
+import {
+  ApiError,
+  createOption,
+  deleteOption,
+  downloadCsv,
+  fetchOptions,
+  fetchSessions,
+  getErrorMessage,
+  runSessionAction,
+  selectCurrentSession,
+  updateOption,
+  updateQuestion,
+  verifyAdminToken,
+} from '../api'
+import {
+  clearAdminToken,
+  getAdminToken,
+  setAdminToken,
+} from '../config'
+import QuestionForm from '../components/QuestionForm'
+import { useLiveResult } from '../hooks/useLiveResult'
+import { subscribeTopic } from '../stomp'
+import { STATUS_LABEL } from '../types'
+import type { VoteOption, VoteSession, VoteStatus } from '../types'
 import './AdminPage.css'
 
-type SessionStatus = 'WAITING' | 'OPEN' | 'CLOSED'
-
-interface VoteSession {
-  year: number
-  status: SessionStatus
-  current: boolean
-}
-
-interface VoteOption {
-  id: number
-  sessionId: number
-  label: string
-}
-
-const statusLabel: Record<SessionStatus, string> = {
-  WAITING: '대기',
-  OPEN: '진행 중',
-  CLOSED: '마감',
-}
-
-const statusClass: Record<SessionStatus, string> = {
+const statusClass: Record<VoteStatus, string> = {
   WAITING: 'waiting',
   OPEN: 'open',
   CLOSED: 'closed',
 }
 
-/**
- * 공통 API 요청 함수
- *
- * 수정 사항
- * 1. 204 No Content 처리
- * 2. Content-Length가 0이거나 응답 body가 비어 있는 경우 처리
- * 3. JSON 응답이 아닌 경우에도 JSON.parse 오류가 발생하지 않도록 처리
- * 4. 서버의 실제 오류 메시지가 있으면 최대한 그대로 전달
- */
-async function request<T>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-    ...options,
-  })
-
-  /*
-   * 응답 body를 먼저 text로 읽습니다.
-   *
-   * 기존에는 response.json()을 바로 호출했기 때문에
-   * 200/204 응답인데 body가 비어 있으면
-   *
-   * Failed to execute 'json' on 'Response':
-   * Unexpected end of JSON input
-   *
-   * 오류가 발생했습니다.
-   */
-  const text = await response.text()
-
-  if (!response.ok) {
-    let message = `요청에 실패했습니다. (${response.status})`
-
-    if (text.trim()) {
-      try {
-        const body = JSON.parse(text)
-
-        if (typeof body?.message === 'string') {
-          message = body.message
-        } else if (typeof body?.error === 'string') {
-          message = body.error
-        }
-      } catch {
-        /*
-         * JSON이 아닌 응답이면 text 자체를 오류 메시지로 사용합니다.
-         */
-        if (text.trim()) {
-          message = text.trim()
-        }
-      }
-    }
-
-    throw new Error(message)
-  }
-
-  /*
-   * 204 또는 body가 없는 200 응답
-   */
-  if (!text.trim()) {
-    return undefined as T
-  }
-
-  /*
-   * JSON 응답
-   */
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    /*
-     * 성공 응답인데 JSON이 아닌 경우
-     * 호출부에서 응답 데이터를 사용하지 않는 API를 고려합니다.
-     */
-    return undefined as T
-  }
-}
+type AuthState = 'checking' | 'required' | 'authorized'
 
 function AdminPage() {
+  const [authState, setAuthState] = useState<AuthState>('checking')
+  const [tokenInput, setTokenInput] = useState('')
+  const [authError, setAuthError] = useState('')
+
   const [sessions, setSessions] = useState<VoteSession[]>([])
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
 
   const [options, setOptions] = useState<VoteOption[]>([])
+  const [optionsLoading, setOptionsLoading] = useState(false)
   const [newOption, setNewOption] = useState('')
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingLabel, setEditingLabel] = useState('')
 
   const [loading, setLoading] = useState(true)
-  const [optionsLoading, setOptionsLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
-
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
   const selectedSession = useMemo(
-    () =>
-      sessions.find(
-        (session) => session.year === selectedYear,
-      ) ?? null,
+    () => sessions.find((session) => session.year === selectedYear) ?? null,
     [sessions, selectedYear],
   )
 
+  /* 선택한 세션의 실시간 집계. 진행자가 참여 현황을 즉시 확인한다 */
+  const { result, connected } = useLiveResult(
+    authState === 'authorized' ? selectedYear : null,
+  )
+
+  /* ---------------------------------------------------------------- */
+  /* 인증                                                             */
+  /* ---------------------------------------------------------------- */
+
   /*
-   * 최초 세션 조회
+   * 백엔드에 ADMIN_TOKEN 이 설정되지 않았으면 인증이 비활성화되어
+   * 키 없이도 요청이 통과한다. 따라서 저장된 키로 한 번 확인해 보고
+   * 401 일 때만 입력 화면을 띄운다.
    */
   useEffect(() => {
     let cancelled = false
 
-    async function fetchSessions() {
+    const check = async () => {
       try {
-        const data = await request<VoteSession[]>('/sessions')
+        await verifyAdminToken()
 
-        if (cancelled) {
-          return
+        if (!cancelled) {
+          setAuthState('authorized')
         }
-
-        setSessions(data)
-
-        /*
-         * 현재 세션을 우선 선택합니다.
-         *
-         * 현재 세션이 없으면 마지막 세션을 선택합니다.
-         */
-        const currentSession =
-          data.find((session) => session.current) ??
-          data.at(-1) ??
-          null
-
-        setSelectedYear(currentSession?.year ?? null)
-        setError('')
       } catch (err) {
         if (cancelled) {
           return
         }
 
-        setError(getErrorMessage(err))
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
+        if (err instanceof ApiError && err.status === 401) {
+          setAuthState('required')
+          return
         }
+
+        /*
+         * 401 이 아닌 오류(네트워크 등)는 인증 문제가 아니므로
+         * 화면을 열고 일반 오류로 표시한다.
+         */
+        setAuthState('authorized')
+        setError(getErrorMessage(err))
       }
     }
 
-    void fetchSessions()
+    void check()
 
     return () => {
       cancelled = true
     }
   }, [])
 
-  /*
-   * 선택된 세션의 선택지 조회
-   */
-  useEffect(() => {
-    if (selectedYear === null) {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!tokenInput.trim()) {
       return
     }
 
+    setAuthError('')
+    setAdminToken(tokenInput.trim())
+
+    try {
+      await verifyAdminToken()
+
+      setAuthState('authorized')
+      setTokenInput('')
+    } catch (err) {
+      clearAdminToken()
+      setAuthError(
+        err instanceof ApiError && err.status === 401
+          ? '관리자 키가 올바르지 않습니다.'
+          : getErrorMessage(err),
+      )
+    }
+  }
+
+  const handleLogout = () => {
+    clearAdminToken()
+    setAuthState('required')
+    setSessions([])
+    setOptions([])
+    setSelectedYear(null)
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 데이터 로딩                                                       */
+  /* ---------------------------------------------------------------- */
+
+  const loadSessions = useCallback(async (preserveSelection = true) => {
+    try {
+      const data = await fetchSessions()
+
+      setSessions(data)
+      setSelectedYear((previous) => {
+        if (preserveSelection && previous !== null) {
+          return previous
+        }
+
+        /* 현재 세션을 우선 선택하고, 없으면 첫 연도를 선택한다 */
+        return (data.find((session) => session.current) ?? data.at(0))?.year ?? null
+      })
+      setError('')
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (authState !== 'authorized') {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => void loadSessions(false), 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [authState, loadSessions])
+
+  /*
+   * 세션 상태 변경을 실시간으로 반영한다.
+   *
+   * 기존 관리자 화면은 목록을 최초 1회만 조회해서, 다른 기기에서
+   * 상태를 바꾸거나 오픈으로 인해 다른 연도가 자동 마감되어도
+   * 화면이 갱신되지 않았다.
+   */
+  useEffect(() => {
+    if (authState !== 'authorized') {
+      return
+    }
+
+    return subscribeTopic('/topic/session', (body) => {
+      let incoming: VoteSession
+
+      try {
+        incoming = JSON.parse(body) as VoteSession
+      } catch {
+        return
+      }
+
+      setSessions((current) =>
+        current.map((session) => {
+          if (session.year === incoming.year) {
+            return incoming
+          }
+
+          /*
+           * 새로 current 가 된 세션이 있으면 다른 세션의 current 는 해제한다.
+           */
+          return incoming.current && session.current
+            ? { ...session, current: false }
+            : session
+        }),
+      )
+    })
+  }, [authState])
+
+  /* 선택된 세션의 선택지 조회 */
+  useEffect(() => {
     let cancelled = false
 
-    async function fetchOptions() {
+    const load = async () => {
+      if (authState !== 'authorized' || selectedYear === null) {
+        setOptions([])
+        return
+      }
+
+      setOptionsLoading(true)
+
       try {
-        const data = await request<VoteOption[]>(
-          `/sessions/${selectedYear}/options`,
-        )
+        const data = await fetchOptions(selectedYear)
 
         if (cancelled) {
           return
         }
 
-        /*
-         * 서버가 내려준 순서를 그대로 사용합니다.
-         *
-         * 프론트에서 sort()하지 않습니다.
-         */
+        /* 서버가 내려준 순서(id 오름차순)를 그대로 사용한다 */
         setOptions(data)
+
+        /* 연도를 바꾸면 이전 연도의 편집 상태는 버린다 */
+        setEditingId(null)
+        setEditingLabel('')
         setError('')
       } catch (err) {
         if (cancelled) {
@@ -222,504 +255,345 @@ function AdminPage() {
       }
     }
 
-    /*
-     * setState-in-effect 오류를 피하기 위해
-     * effect 본문에서는 state를 직접 변경하지 않고
-     * 비동기 작업 내부에서 변경합니다.
-     */
-    void fetchOptions()
+    void load()
 
     return () => {
       cancelled = true
     }
-  }, [selectedYear])
+  }, [authState, selectedYear])
 
-  /*
-   * 현재 선택된 세션 Open / Close
-   */
-  async function handleStatusToggle() {
-    if (!selectedSession || actionLoading) {
-      return
-    }
+  /* ---------------------------------------------------------------- */
+  /* 동작                                                             */
+  /* ---------------------------------------------------------------- */
 
-    const { year, status } = selectedSession
-
-    const nextStatus: SessionStatus =
-      status === 'OPEN' ? 'CLOSED' : 'OPEN'
-
-    const action =
-      status === 'WAITING'
-        ? 'open'
-        : status === 'OPEN'
-          ? 'close'
-          : 'reopen'
-
-    setActionLoading(true)
-    setError('')
-
-    try {
-      const updated = await request<VoteSession>(
-        `/sessions/${year}/${action}`,
-        {
-          method: 'POST',
-        },
-      )
-
-      /*
-       * 백엔드가 정상적으로 세션 객체를 반환하면
-       * 서버 값을 그대로 사용합니다.
-       *
-       * 응답 body가 비어 있는 경우에도
-       * request()가 JSON 파싱 오류를 발생시키지 않습니다.
-       */
-      if (updated) {
-        setSessions((current) =>
-          current.map((session) =>
-            session.year === year
-              ? {
-                  ...session,
-                  ...updated,
-                }
-              : session,
-          ),
-        )
-      } else {
-        /*
-         * 성공 응답인데 body가 없는 경우
-         * 서버가 요청한 상태로 처리했다고 보고
-         * 현재 세션 상태만 로컬에서 갱신합니다.
-         */
-        setSessions((current) =>
-          current.map((session) =>
-            session.year === year
-              ? {
-                  ...session,
-                  status: nextStatus,
-                }
-              : session,
-          ),
-        )
-      }
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setActionLoading(false)
-    }
+  const applySession = (updated: VoteSession) => {
+    setSessions((current) =>
+      current.map((session) =>
+        session.year === updated.year
+          ? updated
+          : updated.current && session.current
+            ? { ...session, current: false }
+            : session,
+      ),
+    )
   }
 
-  /*
-   * 현재 세션을 초기화합니다.
-   *
-   * Reset은 CLOSED 상태에서만 가능하며,
-   * 기존 투표 기록을 삭제하고 WAITING 상태로 되돌립니다.
-   */
-  async function handleReset() {
-    if (
-      !selectedSession ||
-      selectedSession.status !== 'CLOSED' ||
-      actionLoading
-    ) {
-      return
-    }
-
-    if (
-      !window.confirm(
-        `${selectedSession.year}년 세션을 초기화하시겠습니까?\n\n기존 투표 기록이 모두 삭제되고 대기 상태로 돌아갑니다.`,
-      )
-    ) {
-      return
-    }
-
-    setActionLoading(true)
-    setError('')
-
-    try {
-      const updated = await request<VoteSession>(
-        `/sessions/${selectedSession.year}/reset`,
-        {
-          method: 'POST',
-        },
-      )
-
-      if (updated) {
-        setSessions((current) =>
-          current.map((session) =>
-            session.year === selectedSession.year
-              ? {
-                  ...session,
-                  ...updated,
-                }
-              : session,
-          ),
-        )
-      } else {
-        setSessions((current) =>
-          current.map((session) =>
-            session.year === selectedSession.year
-              ? {
-                  ...session,
-                  status: 'WAITING',
-                }
-              : session,
-          ),
-        )
-      }
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  /*
-   * 현재 세션 지정
-   */
-  async function handleSelectCurrent(year: number) {
+  const runAction = async (
+    action: () => Promise<void>,
+    successMessage?: string,
+  ) => {
     if (actionLoading) {
       return
     }
 
     setActionLoading(true)
     setError('')
+    setNotice('')
 
     try {
-      const updated = await request<VoteSession>(
-        `/sessions/${year}/current`,
-        {
-          method: 'PUT',
-        },
-      )
+      await action()
 
-      /*
-       * 서버가 변경된 세션 객체를 반환하는 경우
-       */
-      if (updated) {
-        setSessions((current) =>
-          current.map((session) => ({
-            ...session,
-            current: session.year === updated.year,
-          })),
-        )
-
-        setSelectedYear(updated.year)
-      } else {
-        /*
-         * 서버가 204 또는 빈 body를 반환하는 경우
-         *
-         * 전체 세션을 다시 받아오지 않고
-         * 현재 목록에서 current만 정확히 변경합니다.
-         */
-        setSessions((current) =>
-          current.map((session) => ({
-            ...session,
-            current: session.year === year,
-          })),
-        )
-
-        setSelectedYear(year)
+      if (successMessage) {
+        setNotice(successMessage)
       }
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearAdminToken()
+        setAuthState('required')
+        setAuthError('관리자 키가 만료되었습니다. 다시 입력해 주세요.')
+        return
+      }
+
       setError(getErrorMessage(err))
     } finally {
       setActionLoading(false)
     }
   }
 
-  /*
-   * 선택지 추가
-   */
-  async function handleAddOption(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  const handleOpen = () => {
+    if (!selectedSession) {
+      return
+    }
+
+    void runAction(async () => {
+      applySession(await runSessionAction(selectedSession.year, 'open'))
+      /* 다른 연도가 자동 마감되므로 목록 전체를 다시 맞춘다 */
+      await loadSessions()
+    }, `${selectedSession.year}년 투표를 열었습니다.`)
+  }
+
+  const handleClose = () => {
+    if (!selectedSession) {
+      return
+    }
+
+    void runAction(async () => {
+      applySession(await runSessionAction(selectedSession.year, 'close'))
+    }, `${selectedSession.year}년 투표를 마감했습니다.`)
+  }
+
+  const handleReset = () => {
+    if (!selectedSession) {
+      return
+    }
+
+    if (
+      !window.confirm(
+        `${selectedSession.year}년 세션을 초기화하시겠습니까?\n\n` +
+          '기존 투표 기록이 모두 삭제되고 대기 상태로 돌아갑니다.',
+      )
+    ) {
+      return
+    }
+
+    void runAction(async () => {
+      applySession(await runSessionAction(selectedSession.year, 'reset'))
+    }, `${selectedSession.year}년 세션을 초기화했습니다.`)
+  }
+
+  const handleSelectCurrent = () => {
+    if (!selectedSession) {
+      return
+    }
+
+    void runAction(async () => {
+      applySession(await selectCurrentSession(selectedSession.year))
+      await loadSessions()
+    }, `${selectedSession.year}년을 현재 세션으로 지정했습니다.`)
+  }
+
+  const handleSaveQuestion = (question: string) => {
+    if (!selectedSession) {
+      return
+    }
+
+    void runAction(async () => {
+      applySession(await updateQuestion(selectedSession.year, question))
+    }, '문제 문구를 저장했습니다.')
+  }
+
+  const handleAddOption = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (selectedYear === null || !newOption.trim()) {
       return
     }
 
-    setActionLoading(true)
-    setError('')
+    void runAction(async () => {
+      const created = await createOption(selectedYear, newOption.trim())
 
-    try {
-      const created = await request<VoteOption>(
-        `/sessions/${selectedYear}/options`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            label: newOption.trim(),
-          }),
-        },
-      )
-
-      /*
-       * 새 선택지는 마지막에 추가합니다.
-       */
-      if (created) {
-        setOptions((current) => [
-          ...current,
-          created,
-        ])
-      } else {
-        /*
-         * 생성 API가 body를 반환하지 않는 경우
-         * 서버 목록을 다시 조회합니다.
-         */
-        const refreshed = await request<VoteOption[]>(
-          `/sessions/${selectedYear}/options`,
-        )
-
-        setOptions(refreshed)
-      }
-
+      /* 새 선택지는 항상 마지막에 추가된다 */
+      setOptions((current) => [...current, created])
       setNewOption('')
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setActionLoading(false)
-    }
+      await loadSessions()
+    })
   }
 
-  /*
-   * 선택지 수정 시작
-   */
-  function startEditing(option: VoteOption) {
-    setEditingId(option.id)
-    setEditingLabel(option.label)
-  }
-
-  /*
-   * 선택지 수정 취소
-   */
-  function cancelEditing() {
-    setEditingId(null)
-    setEditingLabel('')
-  }
-
-  /*
-   * 선택지 수정 저장
-   */
-  async function handleUpdateOption(optionId: number) {
-    if (
-      selectedYear === null ||
-      !editingLabel.trim() ||
-      actionLoading
-    ) {
+  const handleUpdateOption = (optionId: number) => {
+    if (selectedYear === null || !editingLabel.trim()) {
       return
     }
 
-    setActionLoading(true)
-    setError('')
-
-    try {
-      const updated = await request<VoteOption>(
-        `/sessions/${selectedYear}/options/${optionId}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({
-            label: editingLabel.trim(),
-          }),
-        },
-      )
-
-      if (updated) {
-        /*
-         * 중요:
-         *
-         * [...current, updated]처럼 다시 추가하지 않습니다.
-         *
-         * 기존 배열에서 id가 같은 요소만 교체하기 때문에
-         * 수정한 옵션의 기존 index가 그대로 유지됩니다.
-         *
-         * 예:
-         *
-         * [A, B, C]
-         * B 수정
-         * -> [A, B수정, C]
-         *
-         * 절대로
-         * [A, C, B수정]
-         * 처럼 이동하지 않습니다.
-         */
-        setOptions((current) =>
-          current.map((option) =>
-            option.id === optionId
-              ? {
-                  ...option,
-                  ...updated,
-                }
-              : option,
-          ),
-        )
-      } else {
-        /*
-         * 수정 API가 body를 반환하지 않는 경우
-         *
-         * 서버 목록을 다시 조회합니다.
-         * 단, 서버가 정렬 순서를 보장해야 합니다.
-         */
-        const refreshed = await request<VoteOption[]>(
-          `/sessions/${selectedYear}/options`,
-        )
-
-        setOptions(refreshed)
-      }
-
-      cancelEditing()
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  /*
-   * 선택지 삭제
-   */
-  async function handleDeleteOption(optionId: number) {
-    if (
-      selectedYear === null ||
-      actionLoading
-    ) {
-      return
-    }
-
-    const target = options.find(
-      (option) => option.id === optionId,
-    )
-
-    if (!target) {
-      return
-    }
-
-    if (
-      !window.confirm(
-        `"${target.label}" 선택지를 삭제하시겠습니까?`,
-      )
-    ) {
-      return
-    }
-
-    setActionLoading(true)
-    setError('')
-
-    try {
-      await request<void>(
-        `/sessions/${selectedYear}/options/${optionId}`,
-        {
-          method: 'DELETE',
-        },
+    void runAction(async () => {
+      const updated = await updateOption(
+        selectedYear,
+        optionId,
+        editingLabel.trim(),
       )
 
       /*
-       * 삭제된 요소만 제거합니다.
-       * 나머지 옵션의 순서는 유지됩니다.
+       * id 가 같은 요소만 교체한다.
+       * 배열에 다시 추가하면 선택지 순서가 바뀐다.
        */
       setOptions((current) =>
-        current.filter(
-          (option) => option.id !== optionId,
-        ),
+        current.map((option) => (option.id === optionId ? updated : option)),
       )
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setActionLoading(false)
+
+      setEditingId(null)
+      setEditingLabel('')
+    })
+  }
+
+  const handleDeleteOption = (optionId: number) => {
+    if (selectedYear === null) {
+      return
     }
+
+    const target = options.find((option) => option.id === optionId)
+
+    if (!target || !window.confirm(`"${target.label}" 선택지를 삭제하시겠습니까?`)) {
+      return
+    }
+
+    void runAction(async () => {
+      await deleteOption(selectedYear, optionId)
+
+      setOptions((current) =>
+        current.filter((option) => option.id !== optionId),
+      )
+      await loadSessions()
+    })
+  }
+
+  const handleDownload = (path: string, fileName: string) => {
+    void runAction(async () => {
+      await downloadCsv(path, fileName)
+    }, '결과 파일을 내려받았습니다.')
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 렌더링                                                           */
+  /* ---------------------------------------------------------------- */
+
+  if (authState === 'checking') {
+    return (
+      <main className="admin-page">
+        <div className="admin-loading">관리자 화면을 준비하는 중입니다.</div>
+      </main>
+    )
+  }
+
+  if (authState === 'required') {
+    return (
+      <main className="admin-page admin-page-centered">
+        <form className="admin-login" onSubmit={(event) => void handleLogin(event)}>
+          <p className="admin-eyebrow">ADMIN</p>
+          <h1>관리자 키 입력</h1>
+          <p className="admin-login-description">
+            투표를 열고 닫는 화면입니다. 진행자에게 전달된 관리자 키를
+            입력해 주세요.
+          </p>
+
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(event) => setTokenInput(event.target.value)}
+            placeholder="관리자 키"
+            autoComplete="current-password"
+            autoFocus
+            aria-label="관리자 키"
+          />
+
+          {authError && <p className="admin-error">{authError}</p>}
+
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={!tokenInput.trim()}
+          >
+            확인
+          </button>
+        </form>
+      </main>
+    )
   }
 
   if (loading) {
     return (
       <main className="admin-page">
-        <div className="admin-loading">
-          관리자 데이터를 불러오는 중입니다.
-        </div>
+        <div className="admin-loading">관리자 데이터를 불러오는 중입니다.</div>
       </main>
     )
   }
+
+  const canEditOptions = selectedSession?.status === 'WAITING'
 
   return (
     <main className="admin-page">
       <header className="admin-header">
         <div>
-          <p className="admin-eyebrow">
-            ADMIN CONTROL PANEL
-          </p>
-
+          <p className="admin-eyebrow">ADMIN CONTROL PANEL</p>
           <h1>관리자 컨트롤 패널</h1>
-
           <p className="admin-description">
-            연도별 투표 세션을 열고 닫거나 선택지를 관리할 수
-            있습니다.
+            연도별 투표를 개별적으로 열고 닫으며, 선택지와 결과를 관리합니다.
           </p>
         </div>
 
-        {selectedSession && (
-          <div
-            className={`session-status-badge ${
-              statusClass[selectedSession.status]
-            }`}
+        <div className="admin-header-actions">
+          <span className={`connection-badge${connected ? ' connected' : ''}`}>
+            <span className="connection-dot" />
+            {connected ? '실시간 연결됨' : '연결 중'}
+          </span>
+
+          <a className="link-button" href="/result" target="_blank" rel="noreferrer">
+            결과 화면 열기
+          </a>
+
+          <a
+            className="link-button"
+            href="/participant"
+            target="_blank"
+            rel="noreferrer"
           >
-            <span className="status-dot" />
-            {statusLabel[selectedSession.status]}
-          </div>
-        )}
+            참가자 화면 열기
+          </a>
+
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => void loadSessions()}
+            disabled={actionLoading}
+          >
+            새로 고침
+          </button>
+
+          {getAdminToken() && (
+            <button type="button" className="link-button" onClick={handleLogout}>
+              키 지우기
+            </button>
+          )}
+        </div>
       </header>
 
-      {error && (
-        <div className="admin-error">
-          {error}
-        </div>
-      )}
+      {error && <div className="admin-error">{error}</div>}
+      {notice && <div className="admin-notice">{notice}</div>}
 
       <section className="admin-section">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">
-              SESSIONS
-            </p>
-
+            <p className="section-kicker">SESSIONS</p>
             <h2>연도별 세션</h2>
           </div>
 
-          <span className="section-count">
-            {sessions.length}개
-          </span>
+          <div className="section-heading-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                handleDownload('/sessions/export', 'balance-vote-all-summary.csv')
+              }
+              disabled={actionLoading}
+            >
+              전체 결과 CSV
+            </button>
+          </div>
         </div>
 
         {sessions.length === 0 ? (
-          <div className="empty-panel">
-            등록된 투표 세션이 없습니다.
-          </div>
+          <div className="empty-panel">등록된 투표 세션이 없습니다.</div>
         ) : (
           <div className="session-list">
             {sessions.map((session) => (
               <button
-                className={`session-card ${
-                  selectedYear === session.year
-                    ? 'selected'
-                    : ''
+                className={`session-card${
+                  selectedYear === session.year ? ' selected' : ''
                 }`}
                 key={session.year}
                 type="button"
-                onClick={() =>
-                  setSelectedYear(session.year)
-                }
+                onClick={() => setSelectedYear(session.year)}
               >
-                <span className="session-year">
-                  {session.year}
+                <span className="session-year">{session.year}</span>
+
+                <span className={`session-status ${statusClass[session.status]}`}>
+                  {STATUS_LABEL[session.status]}
                 </span>
 
-                <span
-                  className={`session-status ${
-                    statusClass[session.status]
-                  }`}
-                >
-                  {statusLabel[session.status]}
+                <span className="session-meta">
+                  선택지 {session.optionCount} · {session.totalVotes}표
                 </span>
 
                 {session.current && (
-                  <span className="current-label">
-                    현재 세션
-                  </span>
+                  <span className="current-label">현재 세션</span>
                 )}
               </button>
             ))}
@@ -730,56 +604,48 @@ function AdminPage() {
       {selectedSession && (
         <>
           <section className="control-card">
-            <div>
-              <p className="section-kicker">
-                SESSION CONTROL
-              </p>
-
-              <h2>
-                {selectedSession.year}년 세션
-              </h2>
+            <div className="control-info">
+              <p className="section-kicker">SESSION CONTROL</p>
+              <h2>{selectedSession.year}년 세션</h2>
 
               <p className="control-description">
                 현재 상태는{' '}
-                <strong>
-                  {statusLabel[selectedSession.status]}
-                </strong>
+                <strong>{STATUS_LABEL[selectedSession.status]}</strong>
                 입니다.
+                {selectedSession.current
+                  ? ' 관객 화면에 이 연도가 표시됩니다.'
+                  : ' 관객 화면에는 표시되지 않습니다.'}
               </p>
             </div>
 
             <div className="control-actions">
-              <button
-                className={`toggle-button ${
-                  selectedSession.status === 'OPEN'
-                    ? 'is-open'
-                    : ''
-                }`}
-                type="button"
-                onClick={() =>
-                  void handleStatusToggle()
-                }
-                disabled={actionLoading}
-                aria-pressed={
-                  selectedSession.status === 'OPEN'
-                }
-              >
-                <span className="toggle-track">
-                  <span className="toggle-thumb" />
-                </span>
-
-                {selectedSession.status === 'WAITING'
-                  ? 'Open'
-                  : selectedSession.status === 'OPEN'
-                    ? 'Close'
-                    : 'Reopen'}
-              </button>
-
-              {selectedSession.status === 'CLOSED' && (
+              {selectedSession.status === 'OPEN' ? (
                 <button
-                  className="secondary-button danger-button"
                   type="button"
-                  onClick={() => void handleReset()}
+                  className="primary-button danger-button"
+                  onClick={handleClose}
+                  disabled={actionLoading}
+                >
+                  투표 마감
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleOpen}
+                  disabled={actionLoading}
+                >
+                  {selectedSession.status === 'CLOSED'
+                    ? '투표 재오픈'
+                    : '투표 열기'}
+                </button>
+              )}
+
+              {selectedSession.status !== 'WAITING' && (
+                <button
+                  type="button"
+                  className="secondary-button danger-button"
+                  onClick={handleReset}
                   disabled={actionLoading}
                 >
                   초기화
@@ -788,62 +654,136 @@ function AdminPage() {
 
               {!selectedSession.current && (
                 <button
-                  className="secondary-button"
                   type="button"
-                  onClick={() =>
-                    void handleSelectCurrent(
-                      selectedSession.year,
-                    )
-                  }
+                  className="secondary-button"
+                  onClick={handleSelectCurrent}
                   disabled={actionLoading}
                 >
                   현재 세션으로 지정
                 </button>
               )}
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  handleDownload(
+                    `/sessions/${selectedSession.year}/export`,
+                    `balance-vote-${selectedSession.year}-summary.csv`,
+                  )
+                }
+                disabled={actionLoading}
+              >
+                결과 CSV
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  handleDownload(
+                    `/sessions/${selectedSession.year}/export/records`,
+                    `balance-vote-${selectedSession.year}-records.csv`,
+                  )
+                }
+                disabled={actionLoading}
+              >
+                투표 기록 CSV
+              </button>
             </div>
+          </section>
+
+          <section className="admin-section">
+            <div className="section-heading">
+              <div>
+                <p className="section-kicker">QUESTION</p>
+                <h2>문제 문구</h2>
+              </div>
+            </div>
+
+            {/*
+              key 로 연도를 주어 세션을 바꿀 때 입력값이 서버 값으로
+              초기화되게 한다. effect 로 동기화하면 연쇄 렌더가 발생한다.
+            */}
+            <QuestionForm
+              key={`${selectedSession.year}:${selectedSession.question ?? ''}`}
+              year={selectedSession.year}
+              question={selectedSession.question}
+              disabled={actionLoading}
+              onSave={handleSaveQuestion}
+            />
+          </section>
+
+          <section className="admin-section">
+            <div className="section-heading">
+              <div>
+                <p className="section-kicker">LIVE RESULT</p>
+                <h2>실시간 집계</h2>
+              </div>
+
+              <span className="section-count">
+                {result?.totalVotes ?? 0}표
+              </span>
+            </div>
+
+            {result === null || result.options.length === 0 ? (
+              <div className="empty-panel">아직 집계할 투표가 없습니다.</div>
+            ) : (
+              <div className="tally-list">
+                {result.options.map((option) => (
+                  <div className="tally-row" key={option.optionId}>
+                    <span className="tally-label">{option.label}</span>
+
+                    <span className="tally-bar">
+                      <span
+                        className="tally-fill"
+                        style={{ width: `${option.voteRate}%` }}
+                      />
+                    </span>
+
+                    <span className="tally-value">
+                      {option.voteCount}표 · {option.voteRate}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="admin-section option-section">
             <div className="section-heading">
               <div>
-                <p className="section-kicker">
-                  OPTIONS
-                </p>
-
+                <p className="section-kicker">OPTIONS</p>
                 <h2>선택지 관리</h2>
               </div>
 
-              <span className="section-count">
-                {options.length}개
-              </span>
+              <span className="section-count">{options.length}개</span>
             </div>
+
+            {!canEditOptions && (
+              <div className="info-panel">
+                진행 중이거나 마감된 세션의 선택지는 변경할 수 없습니다.
+                수정이 필요하면 세션을 초기화해 주세요.
+              </div>
+            )}
 
             <form
               className="option-form"
-              onSubmit={(event) =>
-                void handleAddOption(event)
-              }
+              onSubmit={(event) => void handleAddOption(event)}
             >
               <input
                 value={newOption}
-                onChange={(event) =>
-                  setNewOption(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setNewOption(event.target.value)}
                 placeholder="새 선택지 입력"
                 maxLength={255}
-                disabled={actionLoading}
+                disabled={actionLoading || !canEditOptions}
                 aria-label="새 선택지"
               />
 
               <button
                 type="submit"
                 className="primary-button"
-                disabled={
-                  actionLoading ||
-                  !newOption.trim()
-                }
+                disabled={actionLoading || !newOption.trim() || !canEditOptions}
               >
                 추가
               </button>
@@ -851,57 +791,38 @@ function AdminPage() {
 
             <div className="option-list">
               {optionsLoading ? (
-                <div className="empty-panel">
-                  선택지를 불러오는 중입니다.
-                </div>
+                <div className="empty-panel">선택지를 불러오는 중입니다.</div>
               ) : options.length === 0 ? (
                 <div className="empty-panel">
-                  등록된 선택지가 없습니다.
+                  등록된 선택지가 없습니다. 투표를 열려면 2개 이상 필요합니다.
                 </div>
               ) : (
                 options.map((option, index) => (
-                  <div
-                    className="option-row"
-                    key={option.id}
-                  >
-                    <span className="option-number">
-                      {index + 1}
-                    </span>
+                  <div className="option-row" key={option.id}>
+                    <span className="option-number">{index + 1}</span>
 
                     {editingId === option.id ? (
                       <input
                         className="option-edit-input"
                         value={editingLabel}
-                        onChange={(event) =>
-                          setEditingLabel(
-                            event.target.value,
-                          )
-                        }
+                        onChange={(event) => setEditingLabel(event.target.value)}
                         maxLength={255}
                         autoFocus
                         disabled={actionLoading}
                         onKeyDown={(event) => {
-                          if (
-                            event.key === 'Enter'
-                          ) {
+                          if (event.key === 'Enter') {
                             event.preventDefault()
-
-                            void handleUpdateOption(
-                              option.id,
-                            )
+                            handleUpdateOption(option.id)
                           }
 
-                          if (
-                            event.key === 'Escape'
-                          ) {
-                            cancelEditing()
+                          if (event.key === 'Escape') {
+                            setEditingId(null)
+                            setEditingLabel('')
                           }
                         }}
                       />
                     ) : (
-                      <span className="option-label">
-                        {option.label}
-                      </span>
+                      <span className="option-label">{option.label}</span>
                     )}
 
                     <div className="option-actions">
@@ -910,15 +831,8 @@ function AdminPage() {
                           <button
                             className="text-button save"
                             type="button"
-                            onClick={() =>
-                              void handleUpdateOption(
-                                option.id,
-                              )
-                            }
-                            disabled={
-                              actionLoading ||
-                              !editingLabel.trim()
-                            }
+                            onClick={() => handleUpdateOption(option.id)}
+                            disabled={actionLoading || !editingLabel.trim()}
                           >
                             저장
                           </button>
@@ -926,12 +840,11 @@ function AdminPage() {
                           <button
                             className="text-button"
                             type="button"
-                            onClick={
-                              cancelEditing
-                            }
-                            disabled={
-                              actionLoading
-                            }
+                            onClick={() => {
+                              setEditingId(null)
+                              setEditingLabel('')
+                            }}
+                            disabled={actionLoading}
                           >
                             취소
                           </button>
@@ -941,12 +854,11 @@ function AdminPage() {
                           <button
                             className="text-button"
                             type="button"
-                            onClick={() =>
-                              startEditing(option)
-                            }
-                            disabled={
-                              actionLoading
-                            }
+                            onClick={() => {
+                              setEditingId(option.id)
+                              setEditingLabel(option.label)
+                            }}
+                            disabled={actionLoading || !canEditOptions}
                           >
                             수정
                           </button>
@@ -954,14 +866,8 @@ function AdminPage() {
                           <button
                             className="text-button danger"
                             type="button"
-                            onClick={() =>
-                              void handleDeleteOption(
-                                option.id,
-                              )
-                            }
-                            disabled={
-                              actionLoading
-                            }
+                            onClick={() => handleDeleteOption(option.id)}
+                            disabled={actionLoading || !canEditOptions}
                           >
                             삭제
                           </button>
@@ -977,12 +883,6 @@ function AdminPage() {
       )}
     </main>
   )
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : '알 수 없는 오류가 발생했습니다.'
 }
 
 export default AdminPage

@@ -1,249 +1,96 @@
-import { Client } from '@stomp/stompjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import VoteRateBar from '../components/VoteRateBar'
-import {
-  API_BASE_URL,
-  RESULT_RECONNECT_DELAY,
-  SESSION_POLL_INTERVAL,
-  WS_URL,
-} from '../config'
+import { useCurrentSession } from '../hooks/useCurrentSession'
+import { useLiveResult } from '../hooks/useLiveResult'
+import { PARTICIPANT_STATUS_LABEL } from '../types'
 import './ResultPage.css'
 
-type VoteOptionResult = {
-  optionId: number
-  label: string
-  voteCount: number
-  voteRate: number
-}
-
-type VoteResultResponse = {
-  year: number
-  totalVotes: number
-  options: VoteOptionResult[]
-}
-
-type CurrentSessionResponse = {
-  year: number
-  status: 'WAITING' | 'OPEN' | 'CLOSED'
-  current: boolean
-}
-
+/**
+ * 프로젝터에 띄우는 결과 화면.
+ *
+ * 관객석에서 읽어야 하므로 모든 수치는 화면 너비에 비례해 커진다.
+ */
 function ResultPage() {
-  const [year, setYear] = useState<number | null>(null)
-  const [result, setResult] = useState<VoteResultResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [connected, setConnected] = useState(false)
+  const {
+    session,
+    loading: sessionLoading,
+    error: sessionError,
+    connected,
+  } = useCurrentSession()
 
-  const clientRef = useRef<Client | null>(null)
+  const year = session?.year ?? null
 
-  const loadCurrentSession = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/sessions/current`)
+  const {
+    result,
+    loading: resultLoading,
+    error: resultError,
+    refresh,
+  } = useLiveResult(year)
 
-      if (response.status === 404) {
-        setYear(null)
-        setResult(null)
-        setError(false)
-        return
-      }
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
-      if (!response.ok) {
-        throw new Error('현재 투표를 불러오지 못했습니다.')
-      }
+  /*
+   * 세션 상태는 /topic/session 이 가장 빠르고,
+   * 결과 프레임에도 상태가 실려 온다. 둘 중 최신인 쪽을 쓴다.
+   * 결과 프레임이 없으면 세션 정보로 대체한다.
+   */
+  const status = result?.status ?? session?.status ?? 'WAITING'
+  const question = result?.question ?? session?.question ?? null
 
-      const session: CurrentSessionResponse = await response.json()
+  const maxVoteCount = useMemo(
+    () =>
+      result?.options.reduce(
+        (max, option) => Math.max(max, option.voteCount),
+        0,
+      ) ?? 0,
+    [result],
+  )
 
-      setYear((currentYear) =>
-        currentYear === session.year ? currentYear : session.year,
-      )
-
-      setError(false)
-    } catch {
-      setError(true)
-    } finally {
-      setLoading(false)
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+      return
     }
+
+    void document.documentElement.requestFullscreen().catch(() => {
+      /* 브라우저가 거부하면 무시한다 */
+    })
   }, [])
 
-  /*
-   * 현재 투표 세션 조회
-   */
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadCurrentSession()
-    }, 0)
+    const handleChange = () =>
+      setIsFullscreen(document.fullscreenElement !== null)
 
-    const intervalId = window.setInterval(() => {
-      void loadCurrentSession()
-    }, SESSION_POLL_INTERVAL)
+    document.addEventListener('fullscreenchange', handleChange)
 
-    return () => {
-      window.clearTimeout(timeoutId)
-      window.clearInterval(intervalId)
-    }
-  }, [loadCurrentSession])
+    return () => document.removeEventListener('fullscreenchange', handleChange)
+  }, [])
 
-  /*
-   * 현재 투표 결과 조회
-   *
-   * WebSocket 연결 전 최초 결과 조회와
-   * WebSocket 재연결 후 데이터 재동기화에 사용합니다.
-   */
-  const loadResult = useCallback(async () => {
-    if (year === null) {
-      return
-    }
-
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/sessions/${year}/votes/result`,
-      )
-
-      if (!response.ok) {
-        throw new Error('결과를 불러오지 못했습니다.')
+  /* F 키로 전체화면을 전환한다. 진행 중 마우스를 찾지 않아도 되게 한다 */
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'f' || event.key === 'F') {
+        toggleFullscreen()
       }
-
-      const data: VoteResultResponse = await response.json()
-
-      setResult(data)
-      setError(false)
-    } catch {
-      setError(true)
-    }
-  }, [year])
-
-  /*
-   * 투표 결과 최초 조회
-   */
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadResult()
-    }, 0)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [loadResult])
-
-  /*
-   * STOMP WebSocket 연결
-   *
-   * year가 변경되면 기존 연결을 종료하고
-   * 새로운 투표 topic에 연결합니다.
-   */
-  useEffect(() => {
-    if (year === null) {
-      return
     }
 
-    const client = new Client({
-      brokerURL: WS_URL,
+    window.addEventListener('keydown', handleKey)
 
-      /*
-       * 연결이 끊기면 자동으로 재연결합니다.
-       */
-      reconnectDelay: RESULT_RECONNECT_DELAY,
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [toggleFullscreen])
 
-      /*
-       * WebSocket 연결 timeout
-       */
-      connectionTimeout: 5000,
+  const connectionPill = (
+    <span className={`connection-badge${connected ? ' connected' : ''}`}>
+      <span className="connection-dot" />
+      {connected ? '실시간 연결됨' : '연결 중'}
+    </span>
+  )
 
-      /*
-       * 연결 상태 확인을 위한 heartbeat
-       */
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-
-      /*
-       * 결과 화면에서는 STOMP debug 로그를 출력하지 않습니다.
-       */
-      debug: () => {},
-    })
-
-    /*
-     * 최초 연결 및 자동 재연결 성공 시 실행됩니다.
-     */
-    client.onConnect = () => {
-      setConnected(true)
-
-      /*
-       * 재연결될 때마다 topic을 다시 구독합니다.
-       */
-      client.subscribe(`/topic/vote/${year}`, (message) => {
-        try {
-          const data: VoteResultResponse = JSON.parse(message.body)
-
-          setResult(data)
-          setError(false)
-        } catch {
-          /*
-           * 잘못된 WebSocket 메시지가 들어와도
-           * 기존 결과는 유지합니다.
-           */
-        }
-      })
-
-      /*
-       * 중요:
-       *
-       * WebSocket 연결이 끊긴 동안 발생한 투표 결과는
-       * 해당 연결에서 전달되지 않을 수 있습니다.
-       *
-       * 따라서 연결이 복구될 때 REST API를 다시 호출하여
-       * 최신 결과와 화면의 상태를 동기화합니다.
-       */
-      void loadResult()
-    }
-
-    /*
-     * WebSocket 연결 종료
-     *
-     * 자동 재연결이 진행되는 동안
-     * 화면에는 연결 중 상태를 표시합니다.
-     */
-    client.onWebSocketClose = () => {
-      setConnected(false)
-    }
-
-    /*
-     * WebSocket 오류
-     */
-    client.onWebSocketError = () => {
-      setConnected(false)
-    }
-
-    /*
-     * STOMP protocol 오류
-     */
-    client.onStompError = () => {
-      setConnected(false)
-    }
-
-    clientRef.current = client
-
-    /*
-     * STOMP 연결 시작
-     */
-    client.activate()
-
-    return () => {
-      clientRef.current = null
-
-      /*
-       * 컴포넌트가 제거되거나 year가 변경되면
-       * 해당 STOMP client의 자동 재연결을 종료합니다.
-       */
-      void client.deactivate()
-    }
-  }, [loadResult, year])
-
-  if (loading) {
+  if (sessionLoading) {
     return (
       <main className="result-page">
-        <section className="result-card">
-          투표 결과를 불러오는 중입니다.
+        <section className="result-stage">
+          <p className="result-placeholder">투표 결과를 불러오는 중입니다.</p>
         </section>
       </main>
     )
@@ -252,78 +99,92 @@ function ResultPage() {
   if (year === null) {
     return (
       <main className="result-page">
-        <section className="result-card">
+        <section className="result-stage">
           <span className="result-badge">BALANCE VOTE</span>
-
-          <h1>투표 결과</h1>
-
-          <p>현재 선택된 투표가 없습니다.</p>
-
-          <p>새로운 투표가 선택되면 결과를 확인할 수 있습니다.</p>
-        </section>
-      </main>
-    )
-  }
-
-  if (error && result === null) {
-    return (
-      <main className="result-page">
-        <section className="result-card">
-          <h1>투표 결과</h1>
-
-          <p>투표 결과를 불러오지 못했습니다.</p>
-
-          <button type="button" onClick={() => void loadResult()}>
-            다시 불러오기
-          </button>
-        </section>
-      </main>
-    )
-  }
-
-  if (result === null) {
-    return (
-      <main className="result-page">
-        <section className="result-card">
-          투표 결과를 불러오는 중입니다.
+          <h1 className="result-title">투표 대기 중</h1>
+          <p className="result-placeholder">
+            진행자가 투표를 시작하면 결과가 표시됩니다.
+          </p>
+          {sessionError && <p className="result-error">{sessionError}</p>}
         </section>
       </main>
     )
   }
 
   return (
-    <main className="result-page">
-      <section className="result-card" aria-live="polite">
-        <div className="result-header">
-          <div>
+    <main className={`result-page${isFullscreen ? ' is-fullscreen' : ''}`}>
+      <section className="result-stage" aria-live="polite">
+        <header className="result-header">
+          <div className="result-heading">
             <span className="result-badge">BALANCE VOTE</span>
 
-            <h1>{result.year}년 투표 결과</h1>
+            <h1 className="result-title">
+              <span className="result-year">{year}</span>년
+            </h1>
           </div>
 
-          <span
-            className={`connection-badge ${
-              connected ? 'connected' : ''
-            }`}
-          >
-            {connected ? '실시간 연결됨' : '연결 중'}
-          </span>
+          <div className="result-header-meta">
+            <span className={`status-pill status-${status.toLowerCase()}`}>
+              {PARTICIPANT_STATUS_LABEL[status]}
+            </span>
+
+            {connectionPill}
+
+            <button
+              type="button"
+              className="fullscreen-button"
+              onClick={toggleFullscreen}
+              title="전체화면 (F)"
+            >
+              {isFullscreen ? '전체화면 종료' : '전체화면'}
+            </button>
+          </div>
+        </header>
+
+        {question && <p className="result-question">{question}</p>}
+
+        <div className="result-total">
+          <span className="result-total-label">총 투표</span>
+          <strong className="result-total-value">
+            {result?.totalVotes ?? 0}
+          </strong>
+          <span className="result-total-unit">표</span>
         </div>
 
-        <div className="total-votes">
-          총 <strong>{result.totalVotes}</strong>표
-        </div>
+        {resultLoading && result === null && (
+          <p className="result-placeholder">집계를 불러오는 중입니다.</p>
+        )}
 
-        <div className="vote-rate-list">
-          {result.options.map((option) => (
-            <VoteRateBar
-              key={option.optionId}
-              label={option.label}
-              voteCount={option.voteCount}
-              voteRate={option.voteRate}
-            />
-          ))}
-        </div>
+        {result !== null && result.options.length === 0 && (
+          <p className="result-placeholder">등록된 선택지가 없습니다.</p>
+        )}
+
+        {result !== null && result.options.length > 0 && (
+          <div className="vote-rate-list">
+            {result.options.map((option, index) => (
+              <VoteRateBar
+                key={option.optionId}
+                index={index}
+                label={option.label}
+                voteCount={option.voteCount}
+                voteRate={option.voteRate}
+                isLeading={
+                  maxVoteCount > 0 && option.voteCount === maxVoteCount
+                }
+                isFinal={status === 'CLOSED'}
+              />
+            ))}
+          </div>
+        )}
+
+        {resultError && result === null && (
+          <div className="result-error-panel">
+            <p>{resultError}</p>
+            <button type="button" onClick={refresh}>
+              다시 불러오기
+            </button>
+          </div>
+        )}
       </section>
     </main>
   )

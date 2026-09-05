@@ -1,19 +1,31 @@
+/*
+ * 참가자는 대부분 휴대폰으로 접속한다.
+ * 한 손으로 조작 가능한 큰 터치 영역을 우선한다.
+ */
+
 .participant-page {
-  min-height: calc(100vh - 68px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px 20px 72px;
-  background: var(--navy-50);
+  min-height: 100vh;
+  padding: 24px 16px;
 }
 
 .participant-card {
-  width: min(620px, 100%);
-  padding: 38px;
+  width: min(520px, 100%);
+  padding: 28px 24px 32px;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 18px;
   background: var(--white);
-  box-shadow: 0 18px 45px rgba(23, 35, 60, 0.08);
+  box-shadow: 0 8px 30px rgba(23, 35, 60, 0.06);
+  text-align: left;
+}
+
+.participant-loading {
+  padding: 24px 0;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
 }
 
 .participant-header {
@@ -25,163 +37,210 @@
 
 .participant-badge {
   color: var(--navy-700);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 
 .status-badge {
-  padding: 7px 11px;
+  padding: 6px 11px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-.status-waiting { background: var(--navy-100); color: var(--navy-700); }
-.status-open { background: #eaf1ff; color: var(--navy-800); }
-.status-closed { background: #f1f2f4; color: var(--muted); }
+.status-badge.status-waiting {
+  background: #eef1f5;
+  color: #566172;
+}
+
+.status-badge.status-open {
+  background: #e7f7ed;
+  color: #14713c;
+}
+
+.status-badge.status-closed {
+  background: #fdecec;
+  color: #a92f2f;
+}
 
 .participant-year {
-  margin: 42px 0 0;
-  color: var(--navy-700);
-  font-size: 14px;
-  font-weight: 700;
+  margin-top: 14px;
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
-.participant-state,
-.vote-area {
-  margin-top: 12px;
+.participant-question {
+  margin-top: 8px;
+  color: #33405a;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+/* ---------------- 상태 안내 ---------------- */
+
+.participant-state {
+  padding: 32px 0 8px;
   text-align: center;
 }
 
-.participant-state h1,
-.state-heading h1 {
-  margin: 12px 0 10px;
-  color: var(--navy-900);
-  font-size: clamp(26px, 5vw, 34px);
-  line-height: 1.3;
-  letter-spacing: -0.04em;
-}
-
-.participant-state p,
-.state-heading p {
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.7;
-}
-
 .state-icon {
-  display: inline-flex;
-  width: 64px;
-  height: 64px;
+  margin: 0 auto 14px;
+  width: 54px;
+  height: 54px;
+  display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: var(--navy-50);
-  font-size: 27px;
+  font-size: 26px;
 }
 
 .state-icon.success {
-  background: #e9f5ee;
-  color: #28734b;
-  font-weight: 900;
+  background: #e7f7ed;
+  color: #14713c;
 }
 
-.state-icon.locked { background: #eef0f4; }
+.state-icon.locked {
+  background: #fdecec;
+}
 
-.locked-message,
-.empty-options,
-.participant-error {
-  margin-top: 24px;
-  padding: 13px 16px;
+.participant-state h1 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.participant-state p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.locked-message {
+  margin-top: 18px;
+  padding: 12px 14px;
   border-radius: 10px;
+  background: var(--navy-50);
+  color: #4e5b70;
   font-size: 13px;
   line-height: 1.6;
 }
 
-.locked-message { background: var(--navy-50); color: var(--muted); }
-.empty-options { border: 1px dashed var(--border); color: var(--muted); }
-.participant-error { background: #fff4f4; color: #b33a3a; }
+/* ---------------- 투표 ---------------- */
 
-.vote-area { margin-top: 42px; }
+.vote-area {
+  margin-top: 22px;
+}
 
-.state-heading { text-align: left; }
+.state-heading h1 {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.state-heading p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
 
 .option-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .option-button {
   display: flex;
-  width: 100%;
-  min-height: 62px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  width: 100%;
   padding: 16px 18px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 12px;
   background: var(--white);
-  color: var(--navy-900);
+  color: var(--text);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .option-button:hover:not(:disabled) {
-  border-color: var(--navy-700);
-  background: var(--navy-50);
-  transform: translateY(-1px);
+  border-color: #b9c6da;
 }
 
 .option-button.selected {
   border-color: var(--navy-900);
   background: var(--navy-50);
-  box-shadow: inset 0 0 0 1px var(--navy-900);
 }
 
-.option-button:disabled { cursor: default; opacity: 0.7; }
+.option-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 
 .option-radio {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border: 2px solid #b7c0cf;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #c6d0e0;
   border-radius: 50%;
+  transition: border-color 0.15s ease;
 }
 
 .option-button.selected .option-radio {
-  border: 5px solid var(--navy-900);
+  border-color: var(--navy-900);
+  border-width: 6px;
+}
+
+.empty-options {
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px dashed #d7dee8;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.participant-error {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff4f4;
+  color: #b33a3a;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .vote-submit {
   width: 100%;
-  margin-top: 18px;
-  min-height: 54px;
-  border-radius: 11px;
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 12px;
   background: var(--navy-900);
   color: var(--white);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .vote-submit:hover:not(:disabled) {
   background: var(--navy-800);
-  transform: translateY(-1px);
 }
 
 .vote-submit:disabled {
-  background: #c4cad4;
-  cursor: not-allowed;
-}
-
-@media (max-width: 600px) {
-  .participant-page { padding: 28px 14px 48px; }
-  .participant-card { padding: 26px 20px; border-radius: 16px; }
-  .participant-year { margin-top: 30px; }
+  background: #b9c6da;
+  cursor: default;
 }

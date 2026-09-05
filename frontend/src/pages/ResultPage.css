@@ -1,126 +1,339 @@
+/*
+ * 프로젝터 표시용 화면.
+ *
+ * 관객석 뒤쪽에서도 읽혀야 하므로 폰트 크기를 vw 기반 clamp 로
+ * 지정해 화면이 커질수록 함께 커지게 한다.
+ * 기존에는 카드 폭이 720px 로 묶여 있고 득표율이 14px 이어서
+ * 1080p 프로젝터에서 좁은 컬럼에 작은 글씨로 표시됐다.
+ */
+
 .result-page {
-  min-height: calc(100vh - 57px);
-  padding: 48px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: clamp(20px, 3vw, 56px);
+  background: #0e1117;
   box-sizing: border-box;
 }
 
-.result-card {
-  width: min(720px, 100%);
-  margin: 0 auto;
-  padding: 32px;
-  border: 1px solid #e5e7eb;
-  border-radius: 20px;
-  background: #fff;
+.result-stage {
+  width: min(1600px, 100%);
+  padding: clamp(24px, 3vw, 56px);
+  border-radius: clamp(16px, 1.5vw, 28px);
+  background: #f7f8fa;
   box-sizing: border-box;
 }
+
+.result-page.is-fullscreen .result-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ---------------- 헤더 ---------------- */
 
 .result-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .result-badge {
   display: inline-block;
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  color: #6b7280;
+  font-size: clamp(11px, 0.9vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
 }
 
-.result-header h1 {
+.result-title {
   margin: 0;
-  font-size: 28px;
+  color: #111827;
+  font-size: clamp(30px, 4vw, 76px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.result-year {
+  font-variant-numeric: tabular-nums;
+}
+
+.result-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-pill,
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: clamp(6px, 0.6vw, 11px) clamp(11px, 1vw, 18px);
+  border-radius: 999px;
+  font-size: clamp(12px, 1vw, 19px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill.status-waiting {
+  background: #eef1f5;
+  color: #566172;
+}
+
+.status-pill.status-open {
+  background: #e7f7ed;
+  color: #14713c;
+}
+
+.status-pill.status-closed {
+  background: #fdecec;
+  color: #a92f2f;
 }
 
 .connection-badge {
-  flex-shrink: 0;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: #f3f4f6;
+  background: #eef1f5;
   color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .connection-badge.connected {
-  background: #ecfdf3;
-  color: #15803d;
+  background: #e7f7ed;
+  color: #14713c;
 }
 
-.total-votes {
-  margin: 28px 0;
-  padding: 16px 18px;
-  border-radius: 12px;
-  background: #f8fafc;
-  font-size: 16px;
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-.total-votes strong {
-  font-size: 24px;
+.connection-badge.connected .connection-dot {
+  animation: pulse 1.8s ease-in-out infinite;
 }
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.fullscreen-button {
+  padding: clamp(6px, 0.6vw, 11px) clamp(11px, 1vw, 18px);
+  border: 1px solid #d3d8e0;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: clamp(12px, 0.9vw, 17px);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fullscreen-button:hover {
+  background: #eef1f5;
+}
+
+/* ---------------- 문제 / 총 투표수 ---------------- */
+
+.result-question {
+  margin: clamp(14px, 1.6vw, 28px) 0 0;
+  color: #1f2937;
+  font-size: clamp(20px, 2.6vw, 50px);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.result-total {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: clamp(16px, 1.8vw, 32px) 0 clamp(20px, 2.4vw, 40px);
+}
+
+.result-total-label {
+  color: #6b7280;
+  font-size: clamp(13px, 1.1vw, 22px);
+  font-weight: 700;
+}
+
+.result-total-value {
+  color: #111827;
+  font-size: clamp(30px, 3.4vw, 66px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.result-total-unit {
+  color: #6b7280;
+  font-size: clamp(14px, 1.2vw, 24px);
+  font-weight: 700;
+}
+
+/* ---------------- 득표율 막대 ---------------- */
 
 .vote-rate-list {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: clamp(14px, 1.6vw, 30px);
 }
 
 .vote-rate-item {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: clamp(6px, 0.7vw, 12px);
 }
 
 .vote-rate-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 16px;
 }
 
 .vote-rate-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #111827;
+  font-size: clamp(16px, 1.7vw, 34px);
   font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 
-.vote-rate-value {
+.winner-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  font-size: clamp(10px, 0.8vw, 15px);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.vote-rate-percent {
   flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: clamp(18px, 2vw, 40px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .vote-rate-track {
+  position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
-  height: 16px;
+  height: clamp(34px, 4.4vw, 84px);
   overflow: hidden;
-  border-radius: 999px;
-  background: #e5e7eb;
+  border-radius: clamp(6px, 0.6vw, 12px);
+  background: #e3e6eb;
 }
 
 .vote-rate-fill {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   height: 100%;
+  padding-right: clamp(10px, 1vw, 20px);
   border-radius: inherit;
-  background: #111827;
+  box-sizing: border-box;
+
+  /*
+   * 폭은 requestAnimationFrame 으로 매 프레임 갱신하므로
+   * CSS transition 을 쓰면 두 애니메이션이 겹쳐 끊겨 보인다.
+   */
   transition: none;
 }
 
+/* 막대 안에 들어가는 큰 숫자 */
+.vote-rate-count {
+  color: #fff;
+  font-size: clamp(18px, 2.4vw, 46px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+}
+
+/*
+ * 막대가 너무 짧아 숫자가 안에 들어가지 않을 때는 막대 오른쪽에 붙여 표시한다.
+ * .vote-rate-track 이 flex 이므로 채워진 막대 다음 위치에 자연스럽게 놓인다.
+ */
+.vote-rate-count.outside {
+  margin-left: clamp(10px, 1vw, 20px);
+  text-shadow: none;
+}
+
+.vote-rate-item.is-winner .vote-rate-track {
+  outline: clamp(2px, 0.25vw, 4px) solid #111827;
+  outline-offset: clamp(2px, 0.3vw, 5px);
+}
+
+/* ---------------- 안내 / 오류 ---------------- */
+
+.result-placeholder {
+  margin: clamp(16px, 2vw, 32px) 0 0;
+  color: #6b7280;
+  font-size: clamp(15px, 1.4vw, 28px);
+  font-weight: 600;
+}
+
+.result-error {
+  margin: 12px 0 0;
+  color: #a92f2f;
+  font-size: clamp(13px, 1.1vw, 20px);
+}
+
+.result-error-panel {
+  margin-top: clamp(16px, 2vw, 30px);
+  padding: clamp(14px, 1.4vw, 24px);
+  border-radius: 12px;
+  background: #fdecec;
+  color: #a92f2f;
+}
+
+.result-error-panel p {
+  margin: 0 0 12px;
+  font-size: clamp(13px, 1.1vw, 20px);
+  font-weight: 600;
+}
+
+.result-error-panel button {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #a92f2f;
+  color: #fff;
+  font-size: clamp(13px, 1vw, 17px);
+  font-weight: 700;
+  cursor: pointer;
+}
+
 @media (max-width: 560px) {
-  .result-page {
-    padding: 24px 16px;
-  }
-
-  .result-card {
-    padding: 24px 20px;
-  }
-
   .result-header {
     flex-direction: column;
+    gap: 12px;
   }
 
   .vote-rate-header {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
     gap: 4px;
   }
 }
