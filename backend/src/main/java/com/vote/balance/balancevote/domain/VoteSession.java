@@ -26,6 +26,10 @@ public class VoteSession {
     @Column(nullable = false)
     private VoteStatus status;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean current = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -49,7 +53,19 @@ public class VoteSession {
         this.status = VoteStatus.CLOSED;
     }
 
+    public void reopen() {
+        this.status = VoteStatus.OPEN;
+    }
+
     public void reset() {
         this.status = VoteStatus.WAITING;
+    }
+
+    public void selectAsCurrent() {
+        this.current = true;
+    }
+
+    public void clearCurrent() {
+        this.current = false;
     }
 }

@@ -10,6 +10,7 @@ import com.vote.balance.balancevote.repository.VoteOptionRepository;
 import com.vote.balance.balancevote.repository.VoteRecordRepository;
 import com.vote.balance.balancevote.repository.VoteSessionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -71,7 +73,14 @@ public class VoteService {
                 .voterToken(request.voterToken())
                 .build();
 
-        voteRecordRepository.save(voteRecord);
+        try {
+            voteRecordRepository.saveAndFlush(voteRecord);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 투표한 사용자입니다."
+            );
+        }
 
         VoteResultResponse result = getResult(session);
 
@@ -83,6 +92,32 @@ public class VoteService {
         return result;
     }
 
+    public String issueVoterToken(Integer year) {
+        VoteSession session = findSession(year);
+
+        if (session.getStatus() != VoteStatus.OPEN) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "OPEN 상태의 세션에서만 투표자 토큰을 발급할 수 있습니다."
+            );
+        }
+
+        return UUID.randomUUID().toString();
+    }
+
+    public boolean hasVoted(Integer year, String voterToken) {
+        if (voterToken == null || voterToken.isBlank()) {
+            return false;
+        }
+
+        VoteSession session = findSession(year);
+
+        return voteRecordRepository.existsBySessionIdAndVoterToken(
+                session.getId(),
+                voterToken
+        );
+    }
+
     public VoteResultResponse getResult(Integer year) {
         VoteSession session = findSession(year);
 
@@ -90,8 +125,17 @@ public class VoteService {
     }
 
     private VoteResultResponse getResult(VoteSession session) {
+
+        /*
+         * 반드시 id 오름차순으로 조회한다.
+         *
+         * 선택지를 수정해도 id는 변경되지 않으므로
+         * 수정 후에도 기존 순서가 유지된다.
+         */
         List<VoteOption> options =
-                voteOptionRepository.findBySessionId(session.getId());
+                voteOptionRepository.findBySessionIdOrderByIdAsc(
+                        session.getId()
+                );
 
         long totalVotes = options.stream()
                 .mapToLong(option ->
@@ -111,10 +155,11 @@ public class VoteService {
                                             option.getId()
                                     );
 
-                            BigDecimal voteRate = calculateVoteRate(
-                                    voteCount,
-                                    totalVotes
-                            );
+                            BigDecimal voteRate =
+                                    calculateVoteRate(
+                                            voteCount,
+                                            totalVotes
+                                    );
 
                             return new VoteResultResponse.OptionResult(
                                     option.getId(),

@@ -2,6 +2,8 @@ package com.vote.balance.balancevote.controller;
 
 import com.vote.balance.balancevote.dto.VoteRequest;
 import com.vote.balance.balancevote.dto.VoteResultResponse;
+import com.vote.balance.balancevote.dto.VoteStatusResponse;
+import com.vote.balance.balancevote.dto.VoterTokenResponse;
 import com.vote.balance.balancevote.service.VoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,12 +26,31 @@ public class VoteController {
         );
     }
 
+    @PostMapping("/token")
+    public ResponseEntity<VoterTokenResponse> issueVoterToken(
+            @PathVariable Integer year
+    ) {
+        return ResponseEntity.ok(
+                new VoterTokenResponse(voteService.issueVoterToken(year))
+        );
+    }
+
     @GetMapping("/result")
     public ResponseEntity<VoteResultResponse> getResult(
             @PathVariable Integer year
     ) {
         return ResponseEntity.ok(
                 voteService.getResult(year)
+        );
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<VoteStatusResponse> getVoteStatus(
+            @PathVariable Integer year,
+            @RequestParam String voterToken
+    ) {
+        return ResponseEntity.ok(
+                new VoteStatusResponse(voteService.hasVoted(year, voterToken))
         );
     }
 }
