@@ -1,6 +1,7 @@
 package com.vote.balance.balancevote.repository;
 
 import com.vote.balance.balancevote.domain.VoteSession;
+import com.vote.balance.balancevote.domain.VoteStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +16,12 @@ public interface VoteSessionRepository extends JpaRepository<VoteSession, Long> 
     Optional<VoteSession> findByCurrentTrue();
 
     List<VoteSession> findAllByOrderByYearAsc();
+
+    /**
+     * 한 번에 하나의 연도만 열려 있도록 보장하기 위해
+     * 현재 OPEN 상태인 세션을 조회한다.
+     */
+    List<VoteSession> findAllByStatus(VoteStatus status);
 
     /**
      * 현재 세션을 먼저 모두 해제한다.

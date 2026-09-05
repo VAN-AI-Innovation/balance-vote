@@ -1,181 +1,122 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  API_BASE_URL,
-  SESSION_POLL_INTERVAL,
-} from '../config'
+  ApiError,
+  checkHasVoted,
+  fetchOptions,
+  getErrorMessage,
+  issueVoterToken,
+  submitVote,
+} from '../api'
+import { useCurrentSession } from '../hooks/useCurrentSession'
+import { PARTICIPANT_STATUS_LABEL } from '../types'
+import type { VoteOption } from '../types'
 import './ParticipantPage.css'
 
-type VoteStatus = 'WAITING' | 'OPEN' | 'CLOSED'
-
-type SessionResponse = {
-  year: number
-  status: VoteStatus
-  current: boolean
-}
-
-type VoteOption = {
-  id: number
-  sessionId: number
-  label: string
-}
-
-type VoterTokenResponse = {
-  voterToken: string
-}
-
 function ParticipantPage() {
-  const [year, setYear] = useState<number | null>(null)
-  const [status, setStatus] = useState<VoteStatus>('WAITING')
+  const { session, loading, error: sessionError } = useCurrentSession()
+
+  const year = session?.year ?? null
+  const status = session?.status ?? 'WAITING'
+  const question = session?.question ?? null
+
   const [options, setOptions] = useState<VoteOption[]>([])
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null)
-  const [voterToken, setVoterToken] = useState<string | null>(null)
   const [hasVoted, setHasVoted] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   const tokenKey = year === null ? null : `balance-vote:${year}:voter-token`
 
-  const loadSession = useCallback(async () => {
-    try {
-      const currentResponse = await fetch(`${API_BASE_URL}/sessions/current`)
-
-      if (currentResponse.status === 404) {
-        setYear(null)
-        setOptions([])
-        setSelectedOptionId(null)
-        setVoterToken(null)
-        setHasVoted(false)
-        return
-      }
-
-      if (!currentResponse.ok) {
-        return
-      }
-
-      const currentSession: SessionResponse = await currentResponse.json()
-
-      setYear((currentYear) =>
-        currentYear === currentSession.year ? currentYear : currentSession.year,
-      )
-    } catch {
-      // 네트워크 오류는 참가자 화면에 노출하지 않음
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
+  /*
+   * 선택지와 투표 여부를 불러온다.
+   *
+   * status 를 의존성에 포함하는 것이 핵심이다.
+   * 기존에는 이 로직이 [tokenKey, year] 에만 반응했고 tokenKey 는
+   * year 에서 파생된 값이었다. 그래서 이미 현재 세션인 연도가
+   * WAITING -> OPEN 으로 바뀌어도 재조회가 일어나지 않아
+   * 참가자는 새로고침할 때까지 투표할 수 없었다.
+   */
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadSession()
-    }, 0)
+    let cancelled = false
 
-    const intervalId = window.setInterval(() => {
-      void loadSession()
-    }, SESSION_POLL_INTERVAL)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-      window.clearInterval(intervalId)
-    }
-  }, [loadSession])
-
-  const loadSelectedSession = useCallback(async () => {
-    if (year === null || tokenKey === null) {
-      return
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/sessions/${year}`)
-
-      if (!response.ok) {
-        return
-      }
-
-      const session: SessionResponse = await response.json()
-      setStatus(session.status)
-
-      if (session.status === 'WAITING') {
-        localStorage.removeItem(tokenKey)
-        setHasVoted(false)
-        setSelectedOptionId(null)
-        setVoterToken(null)
+    const load = async () => {
+      if (year === null || tokenKey === null) {
         setOptions([])
         return
       }
 
-      const storedToken = localStorage.getItem(tokenKey)
-      setVoterToken(storedToken)
+      /*
+       * WAITING 은 아직 시작 전이거나 진행자가 초기화한 상태다.
+       * 초기화 후에는 이전 투표 기록이 서버에서 삭제되므로
+       * 저장된 토큰도 버려 다시 투표할 수 있게 한다.
+       */
+      if (status === 'WAITING') {
+        localStorage.removeItem(tokenKey)
+        setOptions([])
+        setSelectedOptionId(null)
+        setHasVoted(false)
+        setError('')
+        return
+      }
 
-      if (session.status === 'OPEN') {
-        if (storedToken === null) {
-          setHasVoted(false)
-        } else {
-          const statusResponse = await fetch(
-            `${API_BASE_URL}/sessions/${year}/votes/status?voterToken=${encodeURIComponent(storedToken)}`,
-          )
+      if (status === 'CLOSED') {
+        setSelectedOptionId(null)
+        setError('')
+        return
+      }
 
-          if (!statusResponse.ok) {
+      try {
+        const storedToken = localStorage.getItem(tokenKey)
+
+        if (storedToken) {
+          const { hasVoted: voted } = await checkHasVoted(year, storedToken)
+
+          if (cancelled) {
             return
           }
 
-          const voteStatus: { hasVoted: boolean } = await statusResponse.json()
-          setHasVoted(voteStatus.hasVoted)
+          setHasVoted(voted)
+        } else {
+          setHasVoted(false)
         }
 
-        const optionsResponse = await fetch(
-          `${API_BASE_URL}/sessions/${year}/options`,
-        )
+        const loadedOptions = await fetchOptions(year)
 
-        if (!optionsResponse.ok) {
+        if (cancelled) {
           return
         }
 
-        const sessionOptions: VoteOption[] = await optionsResponse.json()
-        setOptions(sessionOptions)
-      } else {
-        setOptions([])
-        setSelectedOptionId(null)
-      }
-    } catch {
-      // 네트워크 오류는 참가자 화면에 노출하지 않음
-    }
-  }, [tokenKey, year])
+        setOptions(loadedOptions)
+        setError('')
+      } catch (err) {
+        if (cancelled) {
+          return
+        }
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadSelectedSession()
-    }, 0)
+        /*
+         * 기존에는 catch 블록이 비어 있어 조회 실패가 화면에
+         * 아무 흔적도 남기지 않았다.
+         */
+        setError(getErrorMessage(err))
+      }
+    }
+
+    /*
+     * setTimeout 으로 한 틱 미뤄 effect 본문에서 동기적으로
+     * setState 가 호출되는 것을 피한다.
+     */
+    const timeoutId = window.setTimeout(() => void load(), 0)
 
     return () => {
+      cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [loadSelectedSession])
+  }, [status, tokenKey, year])
 
-  const issueToken = async () => {
-    if (year === null || tokenKey === null) {
-      throw new Error('현재 투표가 선택되지 않았습니다.')
-    }
-
-    const response = await fetch(
-      `${API_BASE_URL}/sessions/${year}/votes/token`,
-      { method: 'POST' },
-    )
-
-    if (!response.ok) {
-      throw new Error('투표자 정보를 준비하지 못했습니다.')
-    }
-
-    const data: VoterTokenResponse = await response.json()
-
-    localStorage.setItem(tokenKey, data.voterToken)
-    setVoterToken(data.voterToken)
-
-    return data.voterToken
-  }
-
-  const handleVote = async () => {
+  const handleVote = useCallback(async () => {
     if (
       year === null ||
+      tokenKey === null ||
       selectedOptionId === null ||
       hasVoted ||
       submitting ||
@@ -185,47 +126,41 @@ function ParticipantPage() {
     }
 
     setSubmitting(true)
+    setError('')
 
     try {
-      const token = voterToken ?? (await issueToken())
+      let token = localStorage.getItem(tokenKey)
 
-      const response = await fetch(
-        `${API_BASE_URL}/sessions/${year}/votes`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            optionId: selectedOptionId,
-            voterToken: token,
-          }),
-        },
-      )
+      if (!token) {
+        const issued = await issueVoterToken(year)
+        token = issued.voterToken
+        localStorage.setItem(tokenKey, token)
+      }
 
-      if (response.status === 409) {
+      await submitVote(year, selectedOptionId, token)
+
+      setHasVoted(true)
+    } catch (err) {
+      /*
+       * 409 는 이미 투표한 경우다. 오류가 아니라 완료 상태로 처리한다.
+       */
+      if (err instanceof ApiError && err.status === 409) {
         setHasVoted(true)
         return
       }
 
-      if (!response.ok) {
-        throw new Error('투표 제출에 실패했습니다.')
-      }
-
-      setHasVoted(true)
-    } catch {
-      // 투표 제출 오류는 참가자 화면에 노출하지 않음
+      setError(getErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [hasVoted, selectedOptionId, status, submitting, tokenKey, year])
 
   if (loading) {
     return (
       <main className="participant-page">
-        <div className="participant-card">
-          투표를 준비하고 있습니다.
-        </div>
+        <section className="participant-card">
+          <p className="participant-loading">투표를 준비하고 있습니다.</p>
+        </section>
       </main>
     )
   }
@@ -237,8 +172,11 @@ function ParticipantPage() {
           <div className="participant-state">
             <div className="state-icon">⏳</div>
             <h1>현재 진행 중인 투표가 없습니다</h1>
-            <p>새로운 투표가 시작되면 참여할 수 있습니다.</p>
+            <p>새로운 투표가 시작되면 이 화면에서 바로 참여할 수 있습니다.</p>
           </div>
+          {sessionError && (
+            <p className="participant-error">{sessionError}</p>
+          )}
         </section>
       </main>
     )
@@ -251,21 +189,19 @@ function ParticipantPage() {
           <span className="participant-badge">BALANCE VOTE</span>
 
           <span className={`status-badge status-${status.toLowerCase()}`}>
-            {status === 'WAITING'
-              ? '대기 중'
-              : status === 'OPEN'
-                ? '투표 진행 중'
-                : '투표 마감'}
+            {PARTICIPANT_STATUS_LABEL[status]}
           </span>
         </div>
 
         <p className="participant-year">{year}년</p>
 
+        {question && <p className="participant-question">{question}</p>}
+
         {status === 'WAITING' && (
           <div className="participant-state">
             <div className="state-icon">⏳</div>
             <h1>투표가 아직 시작되지 않았습니다</h1>
-            <p>투표가 시작되면 선택지가 표시됩니다.</p>
+            <p>진행자가 투표를 열면 선택지가 자동으로 표시됩니다.</p>
           </div>
         )}
 
@@ -287,36 +223,38 @@ function ParticipantPage() {
               <p>한 번 제출한 투표는 변경할 수 없습니다.</p>
             </div>
 
-            <div className="option-list">
-              {options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`option-button ${
-                    selectedOptionId === option.id ? 'selected' : ''
-                  }`}
-                  onClick={() => setSelectedOptionId(option.id)}
-                  disabled={submitting}
-                  aria-pressed={selectedOptionId === option.id}
-                >
-                  <span className="option-radio" aria-hidden="true" />
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {options.length === 0 && (
-              <div className="empty-options">등록된 선택지가 없습니다.</div>
+            {options.length === 0 ? (
+              <div className="empty-options">
+                선택지를 불러오고 있습니다.
+              </div>
+            ) : (
+              <div className="option-list">
+                {options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`option-button${
+                      selectedOptionId === option.id ? ' selected' : ''
+                    }`}
+                    onClick={() => setSelectedOptionId(option.id)}
+                    disabled={submitting}
+                    aria-pressed={selectedOptionId === option.id}
+                  >
+                    <span className="option-radio" aria-hidden="true" />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
             )}
+
+            {error && <p className="participant-error">{error}</p>}
 
             <button
               type="button"
               className="vote-submit"
-              onClick={handleVote}
+              onClick={() => void handleVote()}
               disabled={
-                selectedOptionId === null ||
-                submitting ||
-                options.length === 0
+                selectedOptionId === null || submitting || options.length === 0
               }
             >
               {submitting ? '제출 중...' : '투표 제출'}
@@ -328,7 +266,7 @@ function ParticipantPage() {
           <div className="participant-state">
             <div className="state-icon locked">🔒</div>
             <h1>투표가 마감되었습니다</h1>
-            <p>현재는 투표에 참여할 수 없습니다.</p>
+            <p>결과는 무대 화면에서 확인해 주세요.</p>
             <div className="locked-message">
               투표가 종료되어 선택 및 제출이 잠금 처리되었습니다.
             </div>
