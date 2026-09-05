@@ -2,6 +2,7 @@ package com.vote.balance.balancevote.service;
 
 import com.vote.balance.balancevote.domain.VoteOption;
 import com.vote.balance.balancevote.domain.VoteSession;
+import com.vote.balance.balancevote.domain.VoteStatus;
 import com.vote.balance.balancevote.dto.VoteOptionRequest;
 import com.vote.balance.balancevote.dto.VoteOptionResponse;
 import com.vote.balance.balancevote.repository.VoteOptionRepository;
@@ -45,11 +46,20 @@ public class VoteOptionService {
     ) {
         VoteSession session = findSession(year);
 
-        validateRequest(request);
+        validateEditable(session);
+
+        String label = request.label().trim();
+
+        if (voteOptionRepository.existsBySessionIdAndLabel(session.getId(), label)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 동일한 선택지가 있습니다."
+            );
+        }
 
         VoteOption option = VoteOption.builder()
                 .session(session)
-                .label(request.label().trim())
+                .label(label)
                 .build();
 
         VoteOption savedOption = voteOptionRepository.save(option);
@@ -71,13 +81,26 @@ public class VoteOptionService {
     ) {
         VoteSession session = findSession(year);
 
-        validateRequest(request);
+        validateEditable(session);
 
         VoteOption option = findOption(optionId);
 
         validateOptionBelongsToSession(option, session);
 
-        option.update(request.label().trim());
+        String label = request.label().trim();
+
+        if (voteOptionRepository.existsDuplicateLabel(
+                session.getId(),
+                label,
+                optionId
+        )) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 동일한 선택지가 있습니다."
+            );
+        }
+
+        option.update(label);
 
         return VoteOptionResponse.from(option);
     }
@@ -92,11 +115,30 @@ public class VoteOptionService {
     ) {
         VoteSession session = findSession(year);
 
+        validateEditable(session);
+
         VoteOption option = findOption(optionId);
 
         validateOptionBelongsToSession(option, session);
 
         voteOptionRepository.delete(option);
+    }
+
+    /**
+     * 선택지 변경은 WAITING 상태에서만 허용한다.
+     *
+     * 투표가 진행되거나 마감된 뒤에 선택지를 수정/삭제하면
+     * 이미 집계된 득표의 의미가 바뀌어 결과를 신뢰할 수 없게 된다.
+     * 수정이 필요하면 세션을 초기화(reset)한 뒤 변경해야 한다.
+     */
+    private void validateEditable(VoteSession session) {
+        if (session.getStatus() != VoteStatus.WAITING) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "진행 중이거나 마감된 세션의 선택지는 변경할 수 없습니다. "
+                            + "세션을 초기화한 뒤 수정해 주세요."
+            );
+        }
     }
 
     private VoteSession findSession(Integer year) {
@@ -123,17 +165,6 @@ public class VoteOptionService {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "해당 세션의 선택지를 찾을 수 없습니다."
-            );
-        }
-    }
-
-    private void validateRequest(VoteOptionRequest request) {
-        if (request == null
-                || request.label() == null
-                || request.label().isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "선택지 내용은 비어 있을 수 없습니다."
             );
         }
     }
