@@ -90,6 +90,9 @@ function ResultPage() {
     return (
       <main className="result-page">
         <section className="result-stage">
+          <a className="back-button" href="/" aria-label="메인 페이지로 돌아가기">
+            ← 메인으로
+          </a>
           <p className="result-placeholder">투표 결과를 불러오는 중입니다.</p>
         </section>
       </main>
