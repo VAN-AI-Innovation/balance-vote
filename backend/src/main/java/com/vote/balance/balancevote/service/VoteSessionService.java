@@ -83,6 +83,12 @@ public class VoteSessionService {
         return VoteSessionResponse.from(target);
     }
 
+    /**
+     * WAITING 상태의 세션을 처음 오픈한다.
+     *
+     * 재오픈은 별도의 reopen()에서 처리하여
+     * WAITING -> OPEN과 CLOSED -> OPEN의 의미를 구분한다.
+     */
     @Transactional
     public void open(Integer year) {
         VoteSession session = findSession(year);
@@ -97,6 +103,9 @@ public class VoteSessionService {
         session.open();
     }
 
+    /**
+     * 진행 중인 세션을 마감한다.
+     */
     @Transactional
     public void close(Integer year) {
         VoteSession session = findSession(year);
@@ -111,12 +120,41 @@ public class VoteSessionService {
         session.close();
     }
 
+    /**
+     * 마감된 세션을 투표 기록 삭제 없이 다시 오픈한다.
+     */
+    @Transactional
+    public void reopen(Integer year) {
+        VoteSession session = findSession(year);
+
+        if (session.getStatus() != VoteStatus.CLOSED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "CLOSED 상태의 세션만 재오픈할 수 있습니다."
+            );
+        }
+
+        session.reopen();
+    }
+
+    /**
+     * 마감된 세션을 초기화한다.
+     *
+     * reset은 재오픈과 달리 기존 투표 기록을 모두 삭제하고
+     * 세션을 WAITING 상태로 되돌린다.
+     */
     @Transactional
     public void reset(Integer year) {
         VoteSession session = findSession(year);
 
-        voteRecordRepository.deleteBySessionId(session.getId());
+        if (session.getStatus() != VoteStatus.CLOSED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "CLOSED 상태의 세션만 초기화할 수 있습니다."
+            );
+        }
 
+        voteRecordRepository.deleteBySessionId(session.getId());
         session.reset();
     }
 

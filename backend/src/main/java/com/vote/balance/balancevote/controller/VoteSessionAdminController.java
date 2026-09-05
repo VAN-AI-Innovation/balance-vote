@@ -49,6 +49,12 @@ public class VoteSessionAdminController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/{year}/reopen")
+    public ResponseEntity<Void> reopen(@PathVariable Integer year) {
+        voteSessionService.reopen(year);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{year}/reset")
     public ResponseEntity<Void> reset(@PathVariable Integer year) {
         voteSessionService.reset(year);

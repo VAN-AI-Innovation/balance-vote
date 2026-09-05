@@ -244,21 +244,15 @@ function AdminPage() {
 
     const { year, status } = selectedSession
 
-    /*
-     * 이미 마감된 세션은 다시 오픈하지 않습니다.
-     */
-    if (status === 'CLOSED') {
-      setError(
-        '마감된 세션은 다시 오픈할 수 없습니다. 필요하면 초기화 후 오픈해 주세요.',
-      )
-      return
-    }
-
     const nextStatus: SessionStatus =
       status === 'OPEN' ? 'CLOSED' : 'OPEN'
 
     const action =
-      nextStatus === 'OPEN' ? 'open' : 'close'
+      status === 'WAITING'
+        ? 'open'
+        : status === 'OPEN'
+          ? 'close'
+          : 'reopen'
 
     setActionLoading(true)
     setError('')
@@ -701,10 +695,7 @@ function AdminPage() {
                 onClick={() =>
                   void handleStatusToggle()
                 }
-                disabled={
-                  actionLoading ||
-                  selectedSession.status === 'CLOSED'
-                }
+                disabled={actionLoading}
                 aria-pressed={
                   selectedSession.status === 'OPEN'
                 }
@@ -713,9 +704,11 @@ function AdminPage() {
                   <span className="toggle-thumb" />
                 </span>
 
-                {selectedSession.status === 'OPEN'
+                {selectedSession.status === 'WAITING'
                   ? 'Open'
-                  : 'Close'}
+                  : selectedSession.status === 'OPEN'
+                    ? 'Close'
+                    : 'Reopen'}
               </button>
 
               {!selectedSession.current && (
