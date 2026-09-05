@@ -6,12 +6,31 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/sessions")
 @RequiredArgsConstructor
 public class VoteSessionAdminController {
 
     private final VoteSessionService voteSessionService;
+
+    @GetMapping
+    public ResponseEntity<List<VoteSessionResponse>> getAll() {
+        return ResponseEntity.ok(voteSessionService.getAll());
+    }
+
+    @GetMapping("/current")
+    public ResponseEntity<VoteSessionResponse> getCurrent() {
+        return ResponseEntity.ok(voteSessionService.getCurrent());
+    }
+
+    @PutMapping("/{year}/current")
+    public ResponseEntity<VoteSessionResponse> selectCurrent(
+            @PathVariable Integer year
+    ) {
+        return ResponseEntity.ok(voteSessionService.selectCurrent(year));
+    }
 
     @GetMapping("/{year}")
     public ResponseEntity<VoteSessionResponse> get(@PathVariable Integer year) {

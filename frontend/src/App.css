@@ -216,3 +216,5 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.admin-error { margin-top: 16px; padding: 13px 16px; border-radius: 10px; background: #fff4f4; color: #b33a3a; font-size: 13px; line-height: 1.6; }

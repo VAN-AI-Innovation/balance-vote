@@ -4,12 +4,14 @@ import com.vote.balance.balancevote.domain.VoteSession;
 
 public record VoteSessionResponse(
         Integer year,
-        String status
+        String status,
+        boolean current
 ) {
     public static VoteSessionResponse from(VoteSession session) {
         return new VoteSessionResponse(
                 session.getYear(),
-                session.getStatus().name()
+                session.getStatus().name(),
+                session.isCurrent()
         );
     }
 }

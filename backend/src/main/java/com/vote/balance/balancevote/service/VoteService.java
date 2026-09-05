@@ -108,6 +108,19 @@ public class VoteService {
         return UUID.randomUUID().toString();
     }
 
+    public boolean hasVoted(Integer year, String voterToken) {
+        if (voterToken == null || voterToken.isBlank()) {
+            return false;
+        }
+
+        VoteSession session = findSession(year);
+
+        return voteRecordRepository.existsBySessionIdAndVoterToken(
+                session.getId(),
+                voterToken
+        );
+    }
+
     public VoteResultResponse getResult(Integer year) {
         VoteSession session = findSession(year);
 
