@@ -17,6 +17,25 @@
   box-sizing: border-box;
 }
 
+ .back-button {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  border: 1px solid #d3d8e0;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: clamp(12px, 0.9vw, 17px);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.back-button:hover {
+  background: #eef1f5;
+}
+
 .result-stage {
   width: min(1600px, 100%);
   padding: clamp(24px, 3vw, 56px);
