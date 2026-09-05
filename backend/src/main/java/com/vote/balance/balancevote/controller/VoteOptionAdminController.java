@@ -3,6 +3,7 @@ package com.vote.balance.balancevote.controller;
 import com.vote.balance.balancevote.dto.VoteOptionRequest;
 import com.vote.balance.balancevote.dto.VoteOptionResponse;
 import com.vote.balance.balancevote.service.VoteOptionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,7 @@ public class VoteOptionAdminController {
     @PostMapping
     public ResponseEntity<VoteOptionResponse> create(
             @PathVariable Integer year,
-            @RequestBody VoteOptionRequest request
+            @Valid @RequestBody VoteOptionRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(voteOptionService.create(year, request));
@@ -39,7 +40,7 @@ public class VoteOptionAdminController {
     public ResponseEntity<VoteOptionResponse> update(
             @PathVariable Integer year,
             @PathVariable Long optionId,
-            @RequestBody VoteOptionRequest request
+            @Valid @RequestBody VoteOptionRequest request
     ) {
         return ResponseEntity.ok(
                 voteOptionService.update(

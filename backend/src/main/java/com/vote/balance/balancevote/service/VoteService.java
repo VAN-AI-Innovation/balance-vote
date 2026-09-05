@@ -12,14 +12,10 @@ import com.vote.balance.balancevote.repository.VoteSessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -30,15 +26,14 @@ public class VoteService {
     private final VoteSessionRepository voteSessionRepository;
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRecordRepository voteRecordRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final VoteTallyService voteTallyService;
+    private final VoteBroadcaster voteBroadcaster;
 
     @Transactional
     public VoteResultResponse vote(
             Integer year,
             VoteRequest request
     ) {
-        validateRequest(request);
-
         VoteSession session = findSession(year);
 
         if (session.getStatus() != VoteStatus.OPEN) {
@@ -76,18 +71,22 @@ public class VoteService {
         try {
             voteRecordRepository.saveAndFlush(voteRecord);
         } catch (DataIntegrityViolationException e) {
+            /*
+             * 위 existsBy 검사와 저장 사이에 동일 토큰이 끼어든 경우다.
+             * (session_id, voter_token) UNIQUE 제약이 최종 방어선이다.
+             */
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "이미 투표한 사용자입니다."
             );
         }
 
-        VoteResultResponse result = getResult(session);
+        VoteResultResponse result = voteTallyService.tally(session);
 
-        messagingTemplate.convertAndSend(
-                "/topic/vote/" + year,
-                result
-        );
+        /*
+         * 커밋 이후에 발행된다. VoteBroadcaster 주석 참고.
+         */
+        voteBroadcaster.broadcastResult(result);
 
         return result;
     }
@@ -106,10 +105,6 @@ public class VoteService {
     }
 
     public boolean hasVoted(Integer year, String voterToken) {
-        if (voterToken == null || voterToken.isBlank()) {
-            return false;
-        }
-
         VoteSession session = findSession(year);
 
         return voteRecordRepository.existsBySessionIdAndVoterToken(
@@ -119,79 +114,7 @@ public class VoteService {
     }
 
     public VoteResultResponse getResult(Integer year) {
-        VoteSession session = findSession(year);
-
-        return getResult(session);
-    }
-
-    private VoteResultResponse getResult(VoteSession session) {
-
-        /*
-         * 반드시 id 오름차순으로 조회한다.
-         *
-         * 선택지를 수정해도 id는 변경되지 않으므로
-         * 수정 후에도 기존 순서가 유지된다.
-         */
-        List<VoteOption> options =
-                voteOptionRepository.findBySessionIdOrderByIdAsc(
-                        session.getId()
-                );
-
-        long totalVotes = options.stream()
-                .mapToLong(option ->
-                        voteRecordRepository.countBySessionIdAndOptionId(
-                                session.getId(),
-                                option.getId()
-                        )
-                )
-                .sum();
-
-        List<VoteResultResponse.OptionResult> results =
-                options.stream()
-                        .map(option -> {
-                            long voteCount =
-                                    voteRecordRepository.countBySessionIdAndOptionId(
-                                            session.getId(),
-                                            option.getId()
-                                    );
-
-                            BigDecimal voteRate =
-                                    calculateVoteRate(
-                                            voteCount,
-                                            totalVotes
-                                    );
-
-                            return new VoteResultResponse.OptionResult(
-                                    option.getId(),
-                                    option.getLabel(),
-                                    voteCount,
-                                    voteRate
-                            );
-                        })
-                        .toList();
-
-        return new VoteResultResponse(
-                session.getYear(),
-                totalVotes,
-                results
-        );
-    }
-
-    private BigDecimal calculateVoteRate(
-            long voteCount,
-            long totalVotes
-    ) {
-        if (totalVotes == 0) {
-            return BigDecimal.ZERO.setScale(1);
-        }
-
-        return BigDecimal.valueOf(voteCount)
-                .multiply(BigDecimal.valueOf(100))
-                .divide(
-                        BigDecimal.valueOf(totalVotes),
-                        1,
-                        RoundingMode.HALF_UP
-                );
+        return voteTallyService.tally(findSession(year));
     }
 
     private VoteSession findSession(Integer year) {
@@ -208,17 +131,5 @@ public class VoteService {
                         HttpStatus.NOT_FOUND,
                         "선택지를 찾을 수 없습니다."
                 ));
-    }
-
-    private void validateRequest(VoteRequest request) {
-        if (request == null
-                || request.optionId() == null
-                || request.voterToken() == null
-                || request.voterToken().isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "선택지와 투표자 토큰은 필수입니다."
-            );
-        }
     }
 }
