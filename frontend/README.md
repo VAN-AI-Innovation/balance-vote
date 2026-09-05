@@ -40,6 +40,10 @@ npm run dev
 기반이므로 rewrite 가 없으면 `/admin` 이나 `/result` 를 직접 열거나
 새로고침할 때 Vercel 404 가 표시된다.
 
+rewrite 패턴에서 `/api` 와 `/ws` 는 제외한다. 포함하면 백엔드 주소가
+설정되지 않았을 때 API 요청이 `index.html` 을 HTTP 200 으로 받아
+"JSON 파싱 실패" 처럼 보여 원인을 찾기 어렵다.
+
 프로젝트 설정:
 
 - **Root Directory**: `frontend`
@@ -51,11 +55,28 @@ npm run dev
 
 - `CORS_ALLOWED_ORIGINS` 에 Vercel 도메인 추가.
   preview 배포까지 포함하려면 와일드카드를 사용한다.
-  예: `https://balance-vote.example.com,https://*.vercel.app`
+  예: `https://van.io.kr,https://*.vercel.app`
 - `ADMIN_TOKEN` 지정. 이 값이 `/admin` 화면에서 입력하는 관리자 키다.
 
 환경 변수를 바꾼 뒤에는 **재배포해야 반영된다.** `VITE_` 변수는
 빌드 시점에 번들에 포함되기 때문이다.
+
+### 현재 배포 상태
+
+프론트엔드는 `https://van.io.kr` 에 연결되어 있고 `main` 이 자동 배포된다.
+다만 **백엔드가 배포되어 있지 않다.** 확인 결과:
+
+- `VITE_API_BASE_URL` / `VITE_WS_URL` 이 Vercel 에 설정되어 있지 않다
+  (번들에 백엔드 절대 주소가 들어 있지 않다)
+- `api.van.io.kr` 등 백엔드용 호스트가 존재하지 않는다
+
+따라서 화면은 열리지만 투표 기능은 동작하지 않는다.
+행사 전에 아래가 필요하다.
+
+1. 백엔드를 공개 주소에 배포한다 (WebSocket 을 지원하는 호스팅 필요.
+   Vercel 은 WebSocket 을 프록시하지 못하므로 별도 호스팅이어야 한다)
+2. 백엔드에 `ADMIN_TOKEN`, `CORS_ALLOWED_ORIGINS`, `SPRING_DATASOURCE_*` 설정
+3. Vercel 에 `VITE_API_BASE_URL`, `VITE_WS_URL` 설정 후 재배포
 
 ## 구조
 
