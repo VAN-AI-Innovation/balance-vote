@@ -501,6 +501,9 @@ function AdminPage() {
   return (
     <main className="admin-page">
       <header className="admin-header">
+        <a className="back-button" href="/" aria-label="메인 페이지로 돌아가기">
+          ← 메인으로
+        </a>
         <div>
           <p className="admin-eyebrow">ADMIN CONTROL PANEL</p>
           <h1>관리자 컨트롤 패널</h1>
