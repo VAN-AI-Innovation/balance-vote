@@ -73,6 +73,22 @@ export async function request<T>(
   }
 
   /*
+   * 백엔드 주소가 설정되지 않으면 요청이 프론트엔드 자신에게 가고
+   * 정적 호스팅이 index.html 을 200 으로 돌려준다.
+   * 그대로 두면 JSON 파싱만 조용히 실패해 원인을 찾기 어려우므로
+   * 설정 문제임을 명시한다.
+   */
+  const contentType = response.headers.get('Content-Type') ?? ''
+
+  if (contentType.includes('text/html')) {
+    throw new ApiError(
+      'API 서버에 연결되지 않았습니다. ' +
+        'VITE_API_BASE_URL 환경 변수가 백엔드 주소로 설정되어 있는지 확인해 주세요.',
+      response.status,
+    )
+  }
+
+  /*
    * body 를 먼저 text 로 읽는다.
    *
    * response.json() 을 바로 호출하면 body 가 빈 200/204 응답에서
