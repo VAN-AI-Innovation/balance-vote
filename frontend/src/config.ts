@@ -33,7 +33,11 @@ const configuredWsUrl = readEnv(import.meta.env.VITE_WS_URL)
  * VITE_API_BASE_URL / VITE_WS_URL 을 반드시 지정해야 한다.
  * (Vercel 은 WebSocket 을 rewrite 로 프록시하지 못하므로 절대 URL 이 필요하다)
  */
-export const API_BASE_URL = configuredApiBaseUrl ?? '/api'
+export const API_BASE_URL = configuredApiBaseUrl
+  ? configuredApiBaseUrl.endsWith('/api')
+    ? configuredApiBaseUrl
+    : `${configuredApiBaseUrl}/api`
+  : '/api'
 
 export const WS_URL =
   configuredWsUrl ?? `${wsProtocol}://${window.location.host}/ws`
