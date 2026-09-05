@@ -22,15 +22,22 @@ public class VoteOptionService {
     private final VoteSessionRepository voteSessionRepository;
     private final VoteOptionRepository voteOptionRepository;
 
+    /**
+     * 특정 세션의 선택지를 생성된 순서대로 조회한다.
+     */
     public List<VoteOptionResponse> findAll(Integer year) {
         VoteSession session = findSession(year);
 
-        return voteOptionRepository.findBySessionId(session.getId())
+        return voteOptionRepository
+                .findBySessionIdOrderByIdAsc(session.getId())
                 .stream()
                 .map(VoteOptionResponse::from)
                 .toList();
     }
 
+    /**
+     * 선택지 추가
+     */
     @Transactional
     public VoteOptionResponse create(
             Integer year,
@@ -50,6 +57,12 @@ public class VoteOptionService {
         return VoteOptionResponse.from(savedOption);
     }
 
+    /**
+     * 선택지 수정
+     *
+     * label만 변경하고 id는 유지한다.
+     * 따라서 생성 순서(id 기준)가 절대로 변경되지 않는다.
+     */
     @Transactional
     public VoteOptionResponse update(
             Integer year,
@@ -69,6 +82,9 @@ public class VoteOptionService {
         return VoteOptionResponse.from(option);
     }
 
+    /**
+     * 선택지 삭제
+     */
     @Transactional
     public void delete(
             Integer year,

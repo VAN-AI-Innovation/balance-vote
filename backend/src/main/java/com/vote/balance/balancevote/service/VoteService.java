@@ -10,11 +10,10 @@ import com.vote.balance.balancevote.repository.VoteOptionRepository;
 import com.vote.balance.balancevote.repository.VoteRecordRepository;
 import com.vote.balance.balancevote.repository.VoteSessionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.dao.DataIntegrityViolationException;
-
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -77,8 +76,6 @@ public class VoteService {
         try {
             voteRecordRepository.saveAndFlush(voteRecord);
         } catch (DataIntegrityViolationException e) {
-            // 동시 요청으로 중복 투표 검증을 동시에 통과한 경우에도
-            // DB의 (session_id, voter_token) UNIQUE 제약으로 중복 투표를 차단한다.
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "이미 투표한 사용자입니다."
@@ -128,8 +125,17 @@ public class VoteService {
     }
 
     private VoteResultResponse getResult(VoteSession session) {
+
+        /*
+         * 반드시 id 오름차순으로 조회한다.
+         *
+         * 선택지를 수정해도 id는 변경되지 않으므로
+         * 수정 후에도 기존 순서가 유지된다.
+         */
         List<VoteOption> options =
-                voteOptionRepository.findBySessionId(session.getId());
+                voteOptionRepository.findBySessionIdOrderByIdAsc(
+                        session.getId()
+                );
 
         long totalVotes = options.stream()
                 .mapToLong(option ->
@@ -149,10 +155,11 @@ public class VoteService {
                                             option.getId()
                                     );
 
-                            BigDecimal voteRate = calculateVoteRate(
-                                    voteCount,
-                                    totalVotes
-                            );
+                            BigDecimal voteRate =
+                                    calculateVoteRate(
+                                            voteCount,
+                                            totalVotes
+                                    );
 
                             return new VoteResultResponse.OptionResult(
                                     option.getId(),
